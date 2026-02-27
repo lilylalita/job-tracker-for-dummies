@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Tracker for Dummies</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&display=swap" />
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; background: #F7F7FB; font-family: 'Sora', system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    // ── Palette ────────────────────────────────────────────────────────────────
+    const C = {
+      indigo:     "#6B6BD4",
+      indigoLight:"#DEDEFF",
+      indigoDim:  "#A8A8E8",
+      teal:       "#4ECDC4",
+      tealLight:  "#D0F5F3",
+      orange:     "#FF8C42",
+      orangeLight:"#FFF0E0",
+      pink:       "#F0B8D8",
+      pinkLight:  "#FDE8F3",
+      lavender:   "#C8B8F8",
+      lavLight:   "#EDE8FF",
+      ink:        "#0F0F1A",
+      inkMid:     "#3D3D5C",
+      inkSoft:    "#7A7A9A",
+      border:     "#E8E8F2",
+      bg:         "#F7F7FB",
+      white:      "#FFFFFF",
+    };
+
+    const STATUSES = ["Applied", "Screening Call", "Interviewing", "Offer", "Rejected", "Ghosted"];
+
+    const STATUS_META = {
+      Applied:          { bg: C.indigoLight, text: "#2D2D8A", dot: C.indigo },
+      "Screening Call": { bg: C.lavLight,    text: "#5A2D8A", dot: C.lavender },
+      Interviewing:     { bg: C.tealLight,   text: "#145E5A", dot: C.teal },
+      Offer:            { bg: "#D0F5E0",     text: "#145030", dot: "#3DB870" },
+      Rejected:         { bg: "#FFE0E0",     text: "#7F1D1D", dot: "#DC2626" },
+      Ghosted:          { bg: "#EEEEF5",     text: "#3D3D5C", dot: C.inkSoft },
+    };
+
+    const STAGE_COLORS = {
+      Applied: C.indigo, "Screening Call": C.lavender, Interviewing: C.teal,
+      Offer: "#3DB870", Rejected: "#F97070", Ghosted: C.inkSoft,
+    };
+
+    const STAT_CARDS = [
+      { bg: C.indigoLight, accent: "#2D2D8A", border: C.indigoDim },
+      { bg: C.pinkLight,   accent: "#8A2D5A", border: C.pink },
+      { bg: C.lavLight,    accent: "#5A2D8A", border: C.lavender },
+      { bg: C.tealLight,   accent: "#145E5A", border: C.teal },
+    ];
+
+    const CV_PALETTE = [C.indigo, C.teal, C.orange, "#3DB870", C.lavender, "#F97070", "#5A8ADE", C.pink];
+    const EMPTY_FORM = { title:"", company:"", date:"", status:"Applied", cv:"", notes:"", url:"" };
+
+    const SEED_JOBS = [{"id":"1","title":"Digital Designer","company":"First Page","date":"","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"2","title":"Midweight Digital Designer","company":"Craft","date":"2026-02-14","status":"Applied","cv":"LilyLalita_MidweightDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"3","title":"Senior Digital Designer","company":"Absolute Nexa","date":"2026-02-27","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"4","title":"Midweight Designer","company":"The Fresh Group","date":"2026-02-17","status":"Applied","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"5","title":"Digital Graphic Designer","company":"Wood Mackenzie","date":"2026-02-27","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"6","title":"Visual Designer","company":"Great Value Hiring","date":"2026-02-27","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"7","title":"Mid-weight Digital Designer","company":"ROCKETO","date":"2026-02-24","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"8","title":"Product Designer (mid level)","company":"&Dine","date":"2026-02-16","status":"Applied","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"9","title":"Presentation & Graphic Designer","company":"IGN","date":"2026-02-25","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"10","title":"Product Designer","company":"EverAI","date":"2026-02-26","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"11","title":"Product Designer","company":"Revolut","date":"2026-02-18","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"12","title":"Associate Product Designer","company":"Alpha Insight","date":"2026-02-18","status":"Rejected","cv":"","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"13","title":"Marketing Designer","company":"Funding Circle","date":"2026-02-18","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"14","title":"Product Designer","company":"Palantir","date":"2026-02-18","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"15","title":"Product Designer","company":"Tombola","date":"2026-01-21","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"16","title":"UX Designer","company":"GammaLabs","date":"2025-02-19","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"17","title":"Junior Product Designer","company":"Bending Spoon","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"18","title":"CRM Designer","company":"Wise","date":"2026-02-16","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"19","title":"Visual Designer (CRM & in-app)","company":"Wise","date":"2026-02-10","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"20","title":"Graphic Designer","company":"Mercor","date":"2026-01-27","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"21","title":"UX/UI Designer","company":"Gregg","date":"2026-01-14","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"22","title":"Senior Digital Product Designer","company":"IBM","date":"2026-01-14","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"23","title":"Design Associate","company":"IBM","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_MidweightDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"24","title":"Visual Designer","company":"IBM","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_VisualCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"25","title":"Midweight Graphic Designer","company":"AtkinsRealis","date":"2026-02-22","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"26","title":"Product Designer","company":"SafetyWing","date":"2026-02-23","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"27","title":"Senior Marketing Designer","company":"Railsware","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"28","title":"Brand Design","company":"ElevenLabs","date":"2026-02-23","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"29","title":"Product Designer","company":"Pixel Force","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"30","title":"UX/UI Product Designer","company":"SGB - Singapore","date":"2026-02-23","status":"Applied","cv":"LilyLalita_DigitalExperienceDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"31","title":"Freelance Senior Graphic Designer","company":"Snugg","date":"2026-02-24","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"32","title":"Digital Designer","company":"Evo Agency","date":"2026-02-19","status":"Interviewing","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interviewing","timestamp":null}]},{"id":"33","title":"Brand and Product Designer","company":"Privalgo","date":"2026-02-19","status":"Screening Call","cv":"LilyLalita_CV_BrandLedGrowth","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Screening Call","timestamp":null}]},{"id":"34","title":"Digital Designer","company":"NRLA","date":"2026-02-10","status":"Interviewing","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interviewing","timestamp":null}]},{"id":"35","title":"UX Designer","company":"Adria Solutions","date":"2026-02-24","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"36","title":"UX/UI Designer","company":"Genie Venture","date":"2026-02-19","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"37","title":"Content Designer","company":"Rightmove","date":"2026-02-14","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"38","title":"Digital Project Manager","company":"G&T (Girl & Tech)","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_CV_BrandLedGrowth","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"39","title":"Creative Designer","company":"Frontier Development","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"40","title":"Brand Design","company":"Ben","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"41","title":"Graphic Designer","company":"Team RH Fitness Ltd","date":"2026-02-19","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"42","title":"Figma UI Designer","company":"Luther Tech - Remote","date":"2026-02-26","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"43","title":"Brand Designer","company":"Happl","date":"2026-02-25","status":"Interviewing","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interviewing","timestamp":null}]},{"id":"44","title":"Brand Designer","company":"Superside","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]}];
+    const DEFAULT_COL_WIDTHS = { title:160, status:145, cv:110, company:130, date:110, notes:100 };
+
+    const styles = `
+      *, *::before, *::after { box-sizing: border-box; font-family: 'Sora', system-ui, sans-serif !important; }
+      body { background: ${C.bg}; margin: 0; }
+      .app-root { min-height: 100vh; background: ${C.bg}; }
+      .scrollbar-hide::-webkit-scrollbar { display: none; }
+      .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      .card {
+        background: ${C.white};
+        border-radius: 16px;
+        border: 1.5px solid ${C.border};
+        box-shadow: 0 1px 4px rgba(15,15,26,0.04), 0 4px 16px rgba(15,15,26,0.04);
+      }
+      .app-input {
+        border: 1.5px solid ${C.border};
+        border-radius: 10px;
+        padding: 9px 14px;
+        font-size: 13px;
+        color: ${C.ink};
+        background: ${C.bg};
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        width: 100%;
+      }
+      .app-input:focus { border-color: ${C.indigo}; background: white; box-shadow: 0 0 0 3px ${C.indigoLight}; }
+      .app-input::placeholder { color: ${C.inkSoft}; }
+      select.app-input option { background: white; color: ${C.ink}; }
+      .pill-selector {
+        background: ${C.bg};
+        border: 1.5px solid ${C.border};
+        border-radius: 20px;
+        padding: 5px 13px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        color: ${C.inkSoft};
+        transition: all 0.15s;
+      }
+      .pill-selector:hover { border-color: ${C.indigo}; color: ${C.indigo}; }
+      .pill-selector-active { background: ${C.indigoLight} !important; border-color: ${C.indigo} !important; color: ${C.indigo} !important; }
+      .btn-cta {
+        background: ${C.ink};
+        color: white;
+        border: none;
+        border-radius: 20px;
+        padding: 9px 22px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+        letter-spacing: -0.01em;
+      }
+      .btn-cta:hover { background: ${C.inkMid}; transform: translateY(-1px); }
+      .btn-cta:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+      .btn-outline {
+        background: transparent;
+        border: 1.5px solid ${C.border};
+        border-radius: 20px;
+        padding: 8px 18px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        color: ${C.inkMid};
+        transition: border-color 0.2s, color 0.2s;
+      }
+      .btn-outline:hover { border-color: ${C.indigo}; color: ${C.indigo}; }
+      .nav-tab {
+        padding: 12px 20px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        color: ${C.inkSoft};
+        position: relative;
+        transition: color 0.2s;
+        letter-spacing: -0.01em;
+      }
+      .nav-tab:hover { color: ${C.ink}; }
+      .nav-tab-active { color: ${C.ink} !important; font-weight: 700; }
+      .nav-tab-active::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 20px; right: 20px;
+        height: 2.5px;
+        background: ${C.ink};
+        border-radius: 2px;
+      }
+      tr.trow:hover td { background: ${C.indigoLight}44 !important; }
+      .filter-pill {
+        border-radius: 20px; padding: 5px 14px; font-size: 11px; font-weight: 600;
+        cursor: pointer; border: 1.5px solid ${C.border}; background: white; color: ${C.inkMid}; transition: all 0.15s;
+      }
+      .filter-pill:hover { border-color: ${C.indigo}; color: ${C.indigo}; }
+      .filter-pill-active { background: ${C.indigoLight} !important; color: ${C.indigo} !important; border-color: ${C.indigo} !important; }
+      .prog-track { background: ${C.border}; border-radius: 4px; overflow: hidden; }
+      .prog-fill { border-radius: 4px; transition: width 0.5s ease; }
+      .view-link {
+        font-size: 13px; font-weight: 600; color: ${C.ink}; text-decoration: underline;
+        text-underline-offset: 3px; cursor: pointer; background: none; border: none;
+        letter-spacing: -0.01em;
+      }
+      .view-link:hover { color: ${C.indigo}; }
+    `;
+
+    function formatDateTime(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return d.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) + " · " + d.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+    }
+
+    // ── Sparkline ─────────────────────────────────────────────────────────────
+    function Sparkline({ color = C.indigo, width = 80, height = 32 }) {
+      const pts = [4,8,5,12,9,14,11,10,16,13,18,15,20,17,19,22,18,24,21,26];
+      const max = Math.max(...pts), min = Math.min(...pts);
+      const norm = pts.map(p => ((p - min) / (max - min)) * (height - 4) + 2);
+      const step = width / (pts.length - 1);
+      const d = norm.map((y, i) => `${i === 0 ? "M" : "L"}${i * step},${height - y}`).join(" ");
+      return (
+        <svg width={width} height={height} style={{ display:"block" }}>
+          <path d={d} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.7} />
+        </svg>
+      );
+    }
+
+    // ── Sankey ────────────────────────────────────────────────────────────────
+    function SankeyDiagram({ jobs }) {
+      const W = 560, H = 360, NODE_W = 16;
+      const FUNNEL_COL = { "Applied":0, "Screening Call":1, "Interviewing":2, "Offer":3 };
+      const EXIT_COL   = { "Rejected":4, "Ghosted":4 };
+      const ALL_COL    = { ...FUNNEL_COL, ...EXIT_COL };
+
+      // Strict counts — only jobs currently at each status
+      const counts = useMemo(() => {
+        const c = {}; Object.keys(STAGE_COLORS).forEach(s => c[s] = 0);
+        jobs.forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
+        return c;
+      }, [jobs]);
+
+      // Actual transitions from history
+      const flows = useMemo(() => {
+        const t = {};
+        jobs.forEach(j => {
+          const h = (j.history || []).filter(x => x.status);
+          for (let i = 0; i < h.length - 1; i++) {
+            if (h[i].status !== h[i+1].status) {
+              const key = `${h[i].status}|||${h[i+1].status}`;
+              t[key] = (t[key] || 0) + 1;
+            }
+          }
+        });
+        return t;
+      }, [jobs]);
+
+      if (!jobs.length) return (
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:80,color:C.inkSoft,fontSize:13}}>
+          Add applications to see the funnel
+        </div>
+      );
+
+      const total = jobs.length || 1;
+      const MAX_H = 76, MIN_H = 10;
+      const nH = s => Math.max(MIN_H, Math.round((counts[s] / total) * MAX_H));
+
+      const PAD_X=20, PAD_Y=36, colSpacing=(W-PAD_X*2-NODE_W)/4;
+      const colX = i => PAD_X + i * colSpacing;
+      const ROW_SPACING = (H - PAD_Y*2) / 3;
+      const funnelY = i => PAD_Y + i * ROW_SPACING;
+      const exitY = { "Rejected": PAD_Y + ROW_SPACING*0.5, "Ghosted": PAD_Y + ROW_SPACING*1.8 };
+      const nodeY = s => FUNNEL_COL[s] !== undefined ? funnelY(FUNNEL_COL[s]) : exitY[s];
+
+      const band = (x1,top1,bot1,x2,top2,bot2,color) => {
+        const cx = (x1+x2)/2;
+        return <path d={`M${x1},${top1} C${cx},${top1} ${cx},${top2} ${x2},${top2} L${x2},${bot2} C${cx},${bot2} ${cx},${bot1} ${x1},${bot1} Z`} fill={color} fillOpacity={0.25}/>;
+      };
+
+      const flowBands = Object.entries(flows).map(([key, count]) => {
+        const [from, to] = key.split("|||");
+        const fc = ALL_COL[from], tc = ALL_COL[to];
+        if (fc === undefined || tc === undefined) return null;
+        const fromH = nH(from), toH = nH(to);
+        const bFrom = Math.max(4, Math.round((count / Math.max(counts[from],1)) * fromH));
+        const bTo   = Math.max(4, Math.round((count / Math.max(counts[to],1))   * toH));
+        const fy = nodeY(from), ty = nodeY(to);
+        return (
+          <g key={key}>{band(
+            colX(fc)+NODE_W, fy+(fromH-bFrom)/2, fy+(fromH+bFrom)/2,
+            colX(tc),        ty+(toH-bTo)/2,     ty+(toH+bTo)/2,
+            STAGE_COLORS[from]
+          )}</g>
+        );
+      });
+
+      return (
+        <div style={{overflowX:"auto"}}>
+          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{minWidth:340}}>
+            {flowBands}
+            {Object.entries(FUNNEL_COL).map(([stage, col]) => {
+              const x=colX(col), y=funnelY(col), h=nH(stage);
+              return (
+                <g key={stage}>
+                  <rect x={x} y={y} width={NODE_W} height={h} rx={5} fill={STAGE_COLORS[stage]}/>
+                  <text x={x+NODE_W/2} y={y-10} textAnchor="middle" fontSize={9} fill={C.inkSoft} fontWeight="600">{stage==="Screening Call"?"Screening":stage}</text>
+                  <text x={x+NODE_W/2} y={y+h+14} textAnchor="middle" fontSize={12} fill={C.ink} fontWeight="700">{counts[stage]}</text>
+                  {col>0 && <text x={x+NODE_W/2} y={y+h+27} textAnchor="middle" fontSize={9} fill={C.inkSoft}>{Math.round((counts[stage]/total)*100)}%</text>}
+                </g>
+              );
+            })}
+            {["Rejected","Ghosted"].map(es => {
+              if (!counts[es]) return null;
+              const x=colX(4), y=exitY[es], h=nH(es);
+              return (
+                <g key={es}>
+                  <rect x={x} y={y} width={NODE_W} height={h} rx={5} fill={STAGE_COLORS[es]}/>
+                  <text x={x+NODE_W/2} y={y-10} textAnchor="middle" fontSize={9} fill={C.inkSoft} fontWeight="600">{es}</text>
+                  <text x={x+NODE_W/2} y={y+h+14} textAnchor="middle" fontSize={12} fill={C.ink} fontWeight="700">{counts[es]}</text>
+                  <text x={x+NODE_W/2} y={y+h+27} textAnchor="middle" fontSize={9} fill={C.inkSoft}>{Math.round((counts[es]/total)*100)}%</text>
+                </g>
+              );
+            })}
+          </svg>
+          <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:6}}>
+            {Object.entries(STAGE_COLORS).map(([s,col])=><div key={s} style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:2,background:col}}/><span style={{fontSize:11,color:C.inkSoft,fontWeight:500}}>{s}</span></div>)}
+          </div>
+        </div>
+      );
+    }
+
+    // ── Donut ─────────────────────────────────────────────────────────────────
+    function DonutChart({ slices, label, value }) {
+      const R=66,CX=86,CY=86,stroke=24,circ=2*Math.PI*R;
+      let offset=0;
+      const paths = slices.map((s,i) => {
+        const dash=(s.pct/100)*circ,gap=circ-dash;
+        const el=<circle key={i} cx={CX} cy={CY} r={R} fill="none" stroke={s.color} strokeWidth={stroke} strokeDasharray={`${dash} ${gap}`} strokeDashoffset={-offset} style={{transition:"stroke-dasharray 0.6s ease"}}/>;
+        offset+=dash; return el;
+      });
+      return (
+        <svg width={172} height={172} style={{transform:"rotate(-90deg)"}}>
+          <circle cx={CX} cy={CY} r={R} fill="none" stroke={C.border} strokeWidth={stroke}/>
+          {paths}
+          <text x={CX} y={CY-6} textAnchor="middle" fontSize={16} fontWeight="800" fill={C.ink} style={{transform:"rotate(90deg)",transformOrigin:`${CX}px ${CY}px`}}>{value}</text>
+          <text x={CX} y={CY+13} textAnchor="middle" fontSize={9} fill={C.inkSoft} style={{transform:"rotate(90deg)",transformOrigin:`${CX}px ${CY}px`}}>{label}</text>
+        </svg>
+      );
+    }
+
+    // ── CV Stats ──────────────────────────────────────────────────────────────
+    function CVStatsView({ cvStats }) {
+      const [metric,setMetric] = useState("success");
+      if (!cvStats.length) return (
+        <div className="card" style={{padding:32,textAlign:"center"}}>
+          <p style={{color:C.inkSoft,fontSize:13}}>Add applications with CV versions to see stats</p>
+        </div>
+      );
+      const slices = cvStats.map((cv,i)=>({name:cv.name,pct:metric==="success"?cv.successRate:cv.offerRate,total:cv.total,color:CV_PALETTE[i%CV_PALETTE.length]}));
+      const avgPct = Math.round(slices.reduce((a,s)=>a+s.pct,0)/cvStats.length);
+      const totalPct = slices.reduce((a,s)=>a+s.pct,0)||1;
+      const normSlices = slices.map(s=>({...s,pct:(s.pct/totalPct)*100}));
+      return (
+        <div className="card" style={{padding:24}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20}}>
+            <div>
+              <div style={{fontSize:22,fontWeight:800,color:C.ink,letterSpacing:"-0.03em"}}>CV Performance</div>
+              <div style={{fontSize:12,color:C.inkSoft,marginTop:3}}>Compare your CV versions</div>
+            </div>
+            <div style={{display:"flex",gap:4}}>
+              {[["success","Success Rate"],["offer","Offer Rate"]].map(([m,l])=>(
+                <button key={m} onClick={()=>setMetric(m)} className={`pill-selector ${metric===m?"pill-selector-active":""}`}>{l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:20}}>
+            <DonutChart slices={normSlices} label={metric==="success"?"avg success":"avg offer"} value={`${avgPct}%`}/>
+            <div style={{width:"100%",display:"flex",flexDirection:"column",gap:12}}>
+              {slices.map(s=>(
+                <div key={s.name} style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:9,height:9,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+                  <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                      <span style={{fontSize:13,fontWeight:600,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                      <span style={{fontSize:11,color:C.inkSoft,flexShrink:0}}>{s.total} apps</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                      <div className="prog-track" style={{width:72,height:5}}><div className="prog-fill" style={{height:"100%",background:s.color,width:`${s.pct}%`}}/></div>
+                      <span style={{fontSize:12,fontWeight:700,width:36,textAlign:"right",color:s.color}}>{s.pct}%</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p style={{fontSize:11,color:C.inkSoft,textAlign:"center"}}>{metric==="success"?"Success = reached Screening, Interview, or Offer":"Offer = received a job offer"}</p>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Overlays ──────────────────────────────────────────────────────────────
+    function TimelineOverlay({ job, onClose, onSave }) {
+      if (!job) return null;
+      const init = job.history && job.history.length ? job.history : [{status:job.status,timestamp:null}];
+      const [localHistory, setLocalHistory] = React.useState(init);
+      const [editingIdx, setEditingIdx] = React.useState(null);
+      const dirty = JSON.stringify(localHistory) !== JSON.stringify(init);
+
+      const setStatus = (i, val) => {
+        setLocalHistory(h => h.map((e,idx) => idx===i ? {...e, status:val} : e));
+        setEditingIdx(null);
+      };
+      const deleteEntry = i => {
+        setLocalHistory(h => {
+          const next = h.filter((_,idx) => idx!==i);
+          return next.length ? next : h;
+        });
+      };
+      const handleSave = () => {
+        // Re-stamp prevStatus chain after edits
+        const rebuilt = localHistory.map((e,i) => {
+          if (i===0) { const {prevStatus,...rest} = e; return rest; }
+          return {...e, prevStatus: localHistory[i-1].status};
+        });
+        onSave(job.id, rebuilt);
+        onClose();
+      };
+
+      return (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,15,26,0.35)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000}} onClick={onClose}>
+          <div className="card" style={{padding:24,width:340,margin:"0 16px",background:"white",maxHeight:"80vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+              <div>
+                <div style={{fontWeight:700,color:C.ink,fontSize:15}}>{job.title}</div>
+                <div style={{fontSize:11,color:C.inkSoft,marginTop:2}}>{job.company}</div>
+              </div>
+              <button onClick={onClose} style={{background:C.bg,border:`1.5px solid ${C.border}`,borderRadius:8,width:28,height:28,cursor:"pointer",color:C.inkSoft,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            </div>
+
+            <div style={{position:"relative"}}>
+              <div style={{position:"absolute",left:11,top:8,bottom:8,width:2,background:C.border,borderRadius:1}}/>
+              <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                {localHistory.map((h,i)=>(
+                  <div key={i} style={{display:"flex",gap:12,alignItems:"flex-start",paddingBottom:16,position:"relative"}}>
+                    <div style={{width:24,height:24,borderRadius:"50%",background:STAGE_COLORS[h.status]||C.border,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1,marginTop:1}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:"white"}}/>
+                    </div>
+                    <div style={{flex:1}}>
+                      {editingIdx===i ? (
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:4}}>
+                          {STATUSES.map(s=>(
+                            <button key={s} onClick={()=>setStatus(i,s)}
+                              style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,cursor:"pointer",
+                                border:`1.5px solid ${s===h.status?STAGE_COLORS[s]||C.border:C.border}`,
+                                background:s===h.status?(STATUS_META[s]?.bg||C.bg):"white",
+                                color:s===h.status?(STATUS_META[s]?.text||C.ink):C.inkMid}}>
+                              {s}
+                            </button>
+                          ))}
+                          <button onClick={()=>setEditingIdx(null)} style={{fontSize:11,padding:"3px 10px",borderRadius:20,cursor:"pointer",border:`1.5px solid ${C.border}`,background:"white",color:C.inkSoft}}>Cancel</button>
+                        </div>
+                      ) : (
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:13,fontWeight:600,color:C.ink}}>{h.status}</span>
+                          <button onClick={()=>setEditingIdx(i)} title="Edit status"
+                            style={{fontSize:11,background:"transparent",border:"none",cursor:"pointer",color:C.inkSoft,padding:"2px 6px",borderRadius:6,lineHeight:1}}
+                            onMouseEnter={e=>e.currentTarget.style.background=C.bg}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            ✏️
+                          </button>
+                          {localHistory.length > 1 && (
+                            <button onClick={()=>deleteEntry(i)} title="Remove entry"
+                              style={{fontSize:11,background:"transparent",border:"none",cursor:"pointer",color:"#DC2626",padding:"2px 6px",borderRadius:6,lineHeight:1}}
+                              onMouseEnter={e=>e.currentTarget.style.background="#FEF2F2"}
+                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <div style={{fontSize:11,color:C.inkSoft,marginTop:2}}>{h.timestamp?formatDateTime(h.timestamp):"No timestamp"}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {dirty && (
+              <button onClick={handleSave}
+                style={{width:"100%",marginTop:8,padding:"10px 0",borderRadius:10,background:C.indigo,color:"white",border:"none",cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"inherit"}}>
+                Save Changes
+              </button>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function NoteOverlay({ job, onClose }) {
+      if (!job) return null;
+      return (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,15,26,0.35)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000}} onClick={onClose}>
+          <div className="card" style={{padding:24,width:320,margin:"0 16px",background:"white"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+              <div><div style={{fontWeight:700,color:C.ink,fontSize:15}}>{job.title}</div><div style={{fontSize:11,color:C.inkSoft,marginTop:2}}>{job.company} · {job.date}</div></div>
+              <button onClick={onClose} style={{background:C.bg,border:`1.5px solid ${C.border}`,borderRadius:8,width:28,height:28,cursor:"pointer",color:C.inkSoft,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            </div>
+            <div style={{background:C.bg,borderRadius:10,padding:"12px 14px",fontSize:13,color:C.inkMid,lineHeight:1.7,whiteSpace:"pre-wrap",border:`1.5px solid ${C.border}`}}>{job.notes}</div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Context Menu ──────────────────────────────────────────────────────────
+    function ContextMenu({ job, position, onEdit, onDelete, onViewNote, onViewTimeline, onClose }) {
+      const ref = useRef();
+      useEffect(() => {
+        const h = e => { if(ref.current && !ref.current.contains(e.target)) onClose(); };
+        document.addEventListener("mousedown",h);
+        return () => document.removeEventListener("mousedown",h);
+      }, []);
+      if (!job || !position) return null;
+      const hasTimeline = Array.isArray(job.history) && job.history.length > 1;
+      const item = {width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 14px",fontSize:12,fontWeight:500,background:"transparent",border:"none",cursor:"pointer",color:C.inkMid,textAlign:"left"};
+      return (
+        <div ref={ref} className="card" style={{position:"fixed",top:position.y,left:position.x,zIndex:3000,padding:"6px 0",minWidth:160,background:"white"}}>
+          {hasTimeline && <button style={item} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"} onClick={()=>{onViewTimeline(job);onClose();}}>🕐 View Timeline</button>}
+          {job.notes && <button style={item} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"} onClick={()=>{onViewNote(job);onClose();}}>📝 View Note</button>}
+          {job.url && <a href={job.url} target="_blank" onClick={onClose} style={{...item,textDecoration:"none",display:"flex"}}>🔗 Job Link</a>}
+          {(hasTimeline||job.notes||job.url) && <div style={{borderTop:`1px solid ${C.border}`,margin:"4px 0"}}/>}
+          <button style={item} onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"} onClick={()=>{onEdit(job);onClose();}}>✏️ Edit</button>
+          <button style={{...item,color:"#DC2626"}} onMouseEnter={e=>e.currentTarget.style.background="#FEF2F2"} onMouseLeave={e=>e.currentTarget.style.background="transparent"} onClick={()=>{onDelete(job.id);onClose();}}>🗑️ Delete</button>
+        </div>
+      );
+    }
+
+    // ── Resizable Header ──────────────────────────────────────────────────────
+    function ResizableHeader({ label, colKey, widths, onResize }) {
+      const dragging=useRef(false), startX=useRef(0), startW=useRef(0);
+      const w = widths[colKey];
+      const onMouseDown = useCallback(e => {
+        e.preventDefault(); dragging.current=true; startX.current=e.clientX; startW.current=w;
+        const onMove = e => { if(dragging.current) onResize(colKey, Math.max(60, startW.current+e.clientX-startX.current)); };
+        const onUp = () => { dragging.current=false; document.removeEventListener("mousemove",onMove); document.removeEventListener("mouseup",onUp); };
+        document.addEventListener("mousemove",onMove); document.addEventListener("mouseup",onUp);
+      }, [w,onResize,colKey]);
+      const pct = (w/Object.values(widths).reduce((a,b)=>a+b,0))*100;
+      return (
+        <th style={{width:`${pct}%`,position:"relative",textAlign:"left",fontSize:10,fontWeight:700,color:C.inkSoft,padding:"10px 14px",userSelect:"none",background:C.bg,borderBottom:`2px solid ${C.border}`,letterSpacing:"0.06em",textTransform:"uppercase"}}>
+          <span style={{display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
+          <div onMouseDown={onMouseDown} style={{position:"absolute",top:0,right:0,height:"100%",width:8,cursor:"col-resize",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{width:2,height:12,borderRadius:1,background:C.border}}/>
+          </div>
+        </th>
+      );
+    }
+
+    // ── Status Badge ──────────────────────────────────────────────────────────
+    function StatusBadge({ status, onSelect }) {
+      const [dropPos,setDropPos] = useState(null);
+      const btnRef=useRef(), menuRef=useRef();
+      useEffect(() => {
+        if (!dropPos) return;
+        const h = e => { if(btnRef.current?.contains(e.target)||menuRef.current?.contains(e.target)) return; setDropPos(null); };
+        document.addEventListener("mousedown",h);
+        return () => document.removeEventListener("mousedown",h);
+      }, [dropPos]);
+      const toggle = e => {
+        e.stopPropagation();
+        if (dropPos) { setDropPos(null); return; }
+        const r = btnRef.current.getBoundingClientRect();
+        setDropPos({top:r.bottom+4,left:r.left});
+      };
+      const m = STATUS_META[status] || STATUS_META.Ghosted;
+      return (
+        <>
+          <button ref={btnRef} onClick={toggle} style={{background:m.bg,color:m.text,border:"none",borderRadius:20,padding:"4px 11px 4px 9px",fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+            <span style={{width:6,height:6,borderRadius:"50%",background:m.dot,flexShrink:0}}/>{status}<span style={{opacity:0.45,fontSize:10,marginLeft:1}}>▾</span>
+          </button>
+          {dropPos && (
+            <div ref={menuRef} className="card" style={{position:"fixed",top:dropPos.top,left:dropPos.left,zIndex:9999,padding:"6px 0",minWidth:156,background:"white"}}>
+              {STATUSES.map(s => { const sm=STATUS_META[s]; return (
+                <button key={s} onClick={e=>{e.stopPropagation();onSelect(s);setDropPos(null);}}
+                  style={{width:"100%",textAlign:"left",padding:"8px 14px",fontSize:12,fontWeight:s===status?700:500,color:C.inkMid,background:"transparent",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:sm.dot,flexShrink:0}}/>{s}
+                </button>
+              ); })}
+            </div>
+          )}
+        </>
+      );
+    }
+
+    // ── CV Input ──────────────────────────────────────────────────────────────
+    function CVInput({ value, onChange, pastCVs }) {
+      const [open,setOpen] = useState(false);
+      const ref = useRef();
+      useEffect(() => {
+        const h = e => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        document.addEventListener("mousedown",h);
+        return () => document.removeEventListener("mousedown",h);
+      }, []);
+      const suggestions = pastCVs.filter(cv=>cv.toLowerCase().includes(value.toLowerCase())&&cv!==value);
+      return (
+        <div style={{position:"relative"}} ref={ref}>
+          <input type="text" placeholder="e.g. CV-A, CV-Tech" value={value} onChange={e=>{onChange(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} className="app-input"/>
+          {open && pastCVs.length > 0 && (
+            <div className="card" style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,padding:"6px 0",maxHeight:140,overflowY:"auto",zIndex:999,background:"white"}}>
+              {(suggestions.length>0?suggestions:pastCVs).map(cv=>(
+                <button key={cv} onClick={()=>{onChange(cv);setOpen(false);}}
+                  style={{width:"100%",textAlign:"left",padding:"8px 14px",fontSize:12,background:"transparent",border:"none",cursor:"pointer",color:C.inkMid,display:"flex",alignItems:"center",gap:8}}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{color:C.indigoDim}}>◈</span>{cv}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Applications Line Chart ───────────────────────────────────────────────
+    function ApplicationsChart({ jobs }) {
+      const canvasRef = useRef();
+      const chartRef = useRef();
+
+      useEffect(() => {
+        const jobsWithDates = jobs.filter(j => j.date).sort((a,b) => new Date(a.date) - new Date(b.date));
+        if (!jobsWithDates.length) return;
+
+        const countsByDate = {};
+        jobsWithDates.forEach(j => { countsByDate[j.date] = (countsByDate[j.date] || 0) + 1; });
+
+        const dates = Object.keys(countsByDate).sort();
+        let cumulative = 0;
+        const labels = [];
+        const data = [];
+        dates.forEach(d => {
+          cumulative += countsByDate[d];
+          labels.push(new Date(d).toLocaleDateString("en-GB", { day:"numeric", month:"short" }));
+          data.push(cumulative);
+        });
+
+        if (chartRef.current) chartRef.current.destroy();
+        const ctx = canvasRef.current.getContext("2d");
+        chartRef.current = new Chart(ctx, {
+          type: "line",
+          data: {
+            labels,
+            datasets: [{
+              data,
+              borderColor: C.indigo,
+              backgroundColor: C.indigoLight + "60",
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointHoverRadius: 5,
+              pointBackgroundColor: C.white,
+              pointBorderColor: C.indigo,
+              pointBorderWidth: 2,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                backgroundColor: C.ink,
+                titleFont: { family: "Sora", size: 11, weight: "600" },
+                bodyFont: { family: "Sora", size: 11 },
+                padding: 10,
+                callbacks: {
+                  label: item => `${item.raw} applications total`,
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                border: { display: false },
+                ticks: { font: { family: "Sora", size: 9 }, color: C.inkSoft, maxRotation: 0, maxTicksLimit: 6 }
+              },
+              y: {
+                grid: { color: C.border, drawBorder: false },
+                border: { display: false },
+                ticks: { font: { family: "Sora", size: 9 }, color: C.inkSoft, stepSize: 1 },
+                beginAtZero: true,
+              }
+            }
+          }
+        });
+        return () => { if (chartRef.current) chartRef.current.destroy(); };
+      }, [jobs]);
+
+      if (!jobs.filter(j => j.date).length) return null;
+      return <div style={{height:90, marginTop:16}}><canvas ref={canvasRef} /></div>;
+    }
+
+    // ── Stat Card ─────────────────────────────────────────────────────────────
+    function StatCard({ label, value, sub, idx, trend }) {
+      const sc = STAT_CARDS[idx%4];
+      return (
+        <div style={{background:sc.bg,borderRadius:16,padding:"20px 22px",border:`1.5px solid ${sc.border}`}}>
+          <div style={{fontSize:11,fontWeight:600,color:sc.accent,opacity:0.7,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:8}}>{label}</div>
+          <div style={{fontSize:28,fontWeight:800,color:sc.accent,letterSpacing:"-0.04em",lineHeight:1}}>{value}</div>
+          {sub && <div style={{fontSize:10,color:sc.accent,opacity:0.6,marginTop:4}}>{sub}</div>}
+          {trend && (
+            <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8}}>
+              <span style={{background:sc.accent+"22",color:sc.accent,borderRadius:20,padding:"2px 9px",fontSize:11,fontWeight:700}}>▲ {trend}</span>
+              <span style={{fontSize:11,color:sc.accent,opacity:0.6}}>This week</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ── Main App ──────────────────────────────────────────────────────────────
+    function App() {
+      const [jobs,setJobs] = useState([]);
+      const [view,setView] = useState("dashboard");
+      const [form,setForm] = useState(EMPTY_FORM);
+      const [aiText,setAiText] = useState("");
+      const [aiLoading,setAiLoading] = useState(false);
+      const [apiKey,setApiKey] = useState("");
+      const [addMode,setAddMode] = useState("manual");
+      const [editId,setEditId] = useState(null);
+      const [noteJob,setNoteJob] = useState(null);
+      const [timelineJob,setTimelineJob] = useState(null);
+      const [ctxMenu,setCtxMenu] = useState(null);
+      const [colWidths,setColWidths] = useState(DEFAULT_COL_WIDTHS);
+      const [searchQuery,setSearchQuery] = useState("");
+      const [showFilters,setShowFilters] = useState(false);
+      const [selectedStatuses,setSelectedStatuses] = useState([]);
+      const [sortOrder,setSortOrder] = useState("none");
+      const [showResetConfirm,setShowResetConfirm] = useState(false);
+      const [cardFilter,setCardFilter] = useState("All");
+      const [successFilter,setSuccessFilter] = useState("All time");
+      const [activityView,setActivityView] = useState("activity");
+
+      useEffect(() => {
+        try {
+          const r = localStorage.getItem("jobs");
+          if (r) { setJobs(JSON.parse(r)); }
+          else { setJobs(SEED_JOBS); localStorage.setItem("jobs", JSON.stringify(SEED_JOBS)); }
+          const c = localStorage.getItem("colWidths"); if(c) setColWidths(JSON.parse(c));
+          const k = localStorage.getItem("apiKey"); if(k) setApiKey(k);
+        } catch {}
+      }, []);
+
+      const save = u => { setJobs(u); localStorage.setItem("jobs", JSON.stringify(u)); };
+
+      const updateStatus = (id, newStatus) => {
+        save(jobs.map(j => {
+          if (j.id!==id) return j;
+          const history = j.history||[{status:j.status,timestamp:new Date().toISOString()}];
+          const last = history.filter(h=>h.status).slice(-1)[0] || history[history.length-1];
+          if (last.status===newStatus) return {...j,status:newStatus};
+          return {...j,status:newStatus,history:[...history,{status:newStatus,prevStatus:last.status,timestamp:new Date().toISOString()}]};
+        }));
+      };
+
+      const setCol = (key, w) => {
+        const diff = w-colWidths[key], otherKeys=Object.keys(colWidths).filter(k=>k!==key);
+        const otherTotal = otherKeys.reduce((a,k)=>a+colWidths[k],0);
+        const updated = {...colWidths,[key]:w};
+        otherKeys.forEach(k=>{updated[k]=Math.max(60,colWidths[k]-diff*(colWidths[k]/otherTotal));});
+        setColWidths(updated); localStorage.setItem("colWidths",JSON.stringify(updated));
+      };
+
+      const resetAllData = () => { save([]); setShowResetConfirm(false); setView("dashboard"); };
+
+      const stats = {
+        total: jobs.length,
+        interviewing: jobs.filter(j=>j.status==="Interviewing").length,
+        offers: jobs.filter(j=>j.status==="Offer").length,
+        successRate: jobs.length?Math.round((jobs.filter(j=>["Screening Call","Interviewing","Offer"].includes(j.status)).length/jobs.length)*100):0,
+        active: jobs.filter(j=>!["Rejected","Ghosted"].includes(j.status)).length,
+      };
+
+      const cvStatsData = () => {
+        const cvs = {};
+        jobs.forEach(j => {
+          if (!j.cv) return;
+          if (!cvs[j.cv]) cvs[j.cv]={total:0,interviews:0,offers:0};
+          cvs[j.cv].total++;
+          if (["Screening Call","Interviewing","Offer"].includes(j.status)) cvs[j.cv].interviews++;
+          if (j.status==="Offer") cvs[j.cv].offers++;
+        });
+        return Object.entries(cvs).map(([name,d])=>({name,total:d.total,successRate:d.total?Math.round((d.interviews/d.total)*100):0,offerRate:d.total?Math.round((d.offers/d.total)*100):0}));
+      };
+
+      const handleAiAutoFill = async () => {
+        if (!aiText.trim()) return;
+        if (!apiKey.trim()) return alert("Please enter your Anthropic API key first.");
+        setAiLoading(true);
+        try {
+          const res = await fetch("https://api.anthropic.com/v1/messages", {
+            method:"POST",
+            headers:{
+              "Content-Type":"application/json",
+              "x-api-key": apiKey,
+              "anthropic-version":"2023-06-01",
+              "anthropic-dangerous-direct-browser-access":"true",
+            },
+            body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,messages:[{role:"user",content:`Extract job application details from the following text and return ONLY a JSON object with these fields: title, company, date (YYYY-MM-DD format, today if not found), cv (empty string), notes, url (empty string if not found). Text:\n\n${aiText}`}]})
+          });
+          const data = await res.json();
+          if (data.error) throw new Error(data.error.message);
+          const parsed = JSON.parse(data.content.map(i=>i.text||"").join("").replace(/```json|```/g,"").trim());
+          setForm({...EMPTY_FORM,...parsed,status:"Applied"}); setAddMode("manual");
+        } catch(e) { alert("Could not parse. " + (e.message||"Check your API key or try again.")); }
+        setAiLoading(false);
+      };
+
+      const submitForm = () => {
+        if (!form.title||!form.company) return alert("Title and company are required.");
+        if (editId) {
+          save(jobs.map(j => {
+            if (j.id!==editId) return j;
+            const history = [...(j.history||[])];
+            const lastStatus = history.filter(h=>h.status).slice(-1)[0]?.status || j.status;
+            if (form.status !== j.status)
+              history.push({status:form.status, prevStatus:lastStatus, timestamp:new Date().toISOString()});
+            if (form.notes && form.notes !== j.notes)
+              history.push({type:"note", timestamp:new Date().toISOString()});
+            return {...j,...form,id:editId,history};
+          }));
+          setEditId(null);
+        } else {
+          save([...jobs,{...form,id:Date.now().toString(),history:[{status:form.status,timestamp:new Date().toISOString()}]}]);
+        }
+        setForm(EMPTY_FORM); setAiText(""); setView("list");
+      };
+
+      const deleteJob = id => save(jobs.filter(j=>j.id!==id));
+      const startEdit = job => { setForm(job); setEditId(job.id); setAddMode("manual"); setView("add"); };
+      const toggleStatus = s => setSelectedStatuses(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);
+      const resetFilters = () => { setSelectedStatuses([]); setSortOrder("none"); };
+      const activeFilterCount = selectedStatuses.length+(sortOrder!=="none"?1:0);
+
+      const filtered = useMemo(() => {
+        let res = selectedStatuses.length>0?jobs.filter(j=>selectedStatuses.includes(j.status)):[...jobs];
+        if (searchQuery.trim()) { const q=searchQuery.toLowerCase(); res=res.filter(j=>j.title.toLowerCase().includes(q)||j.company.toLowerCase().includes(q)); }
+        if (sortOrder==="desc") res.sort((a,b)=>new Date(b.date)-new Date(a.date));
+        else if (sortOrder==="asc") res.sort((a,b)=>new Date(a.date)-new Date(b.date));
+        else res=[...res].reverse();
+        return res;
+      }, [jobs,selectedStatuses,sortOrder,searchQuery]);
+
+      const successJobs = useMemo(() => {
+        if (successFilter === "Last 30d") {
+          const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 30);
+          return jobs.filter(j => j.date && new Date(j.date) >= cutoff);
+        }
+        return jobs;
+      }, [jobs, successFilter]);
+
+      const successStats = useMemo(() => ({
+        rate: successJobs.length ? Math.round((successJobs.filter(j=>["Screening Call","Interviewing","Offer"].includes(j.status)).length / successJobs.length) * 100) : 0,
+      }), [successJobs]);
+
+      const cardFilteredJobs = useMemo(() => {
+        if (cardFilter === "All") return jobs;
+        if (cardFilter === "Interview") return jobs.filter(j => j.status === "Interviewing");
+        if (cardFilter === "Reject") return jobs.filter(j => j.status === "Rejected");
+        if (cardFilter === "Offer") return jobs.filter(j => j.status === "Offer");
+        return jobs;
+      }, [jobs, cardFilter]);
+
+      const recentActivity = useMemo(() => {
+        const events = [];
+        jobs.forEach(j => {
+          (j.history || []).forEach((h, i, arr) => {
+            if (h.type === "note") {
+              events.push({ title:j.title, company:j.company, type:"note", timestamp:h.timestamp, status:j.status });
+            } else {
+              const prevStatus = h.prevStatus || (i > 0 ? arr.slice(0,i).filter(x=>x.status).slice(-1)[0]?.status : null);
+              events.push({ title:j.title, company:j.company, type:"status", status:h.status, prevStatus, timestamp:h.timestamp, isFirst:i===0&&!h.prevStatus });
+            }
+          });
+        });
+        events.sort((a,b) => {
+          if (a.timestamp && b.timestamp) return new Date(b.timestamp) - new Date(a.timestamp);
+          if (a.timestamp) return -1;
+          if (b.timestamp) return 1;
+          return 0;
+        });
+        return events.slice(0,5);
+      }, [jobs]);
+
+      const recentApplications = useMemo(() =>
+        [...jobs].sort((a,b) => new Date(b.date||0) - new Date(a.date||0)).slice(0,5)
+      , [jobs]);
+
+      const pastCVs = [...new Set(jobs.map(j=>j.cv).filter(Boolean))];
+      const cols = [{key:"title",label:"Position"},{key:"status",label:"Status"},{key:"cv",label:"CV Version"},{key:"company",label:"Company"},{key:"date",label:"Date"},{key:"notes",label:"Notes"}];
+
+      return (
+        <div className="app-root">
+          <style>{styles}</style>
+
+          {/* Reset Confirm */}
+          {showResetConfirm && (
+            <div style={{position:"fixed",inset:0,background:"rgba(15,15,26,0.35)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:4000}} onClick={()=>setShowResetConfirm(false)}>
+              <div className="card" style={{padding:28,width:280,margin:"0 16px",textAlign:"center",background:"white"}} onClick={e=>e.stopPropagation()}>
+                <div style={{fontSize:34,marginBottom:10}}>⚠️</div>
+                <div style={{fontWeight:800,color:C.ink,fontSize:16,marginBottom:6}}>Reset All Data?</div>
+                <p style={{fontSize:12,color:C.inkSoft,marginBottom:20,lineHeight:1.6}}>This will permanently delete all your job applications.</p>
+                <div style={{display:"flex",gap:8}}>
+                  <button className="btn-outline" style={{flex:1,padding:9}} onClick={()=>setShowResetConfirm(false)}>Cancel</button>
+                  <button onClick={resetAllData} style={{flex:1,background:"#DC2626",color:"white",border:"none",borderRadius:20,padding:9,fontSize:13,fontWeight:700,cursor:"pointer"}}>Yes, Reset</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {ctxMenu?.job && <ContextMenu job={ctxMenu.job} position={{x:ctxMenu.x,y:ctxMenu.y}} onEdit={startEdit} onDelete={deleteJob} onViewNote={setNoteJob} onViewTimeline={setTimelineJob} onClose={()=>setCtxMenu(null)}/>}
+          {noteJob && <NoteOverlay job={noteJob} onClose={()=>setNoteJob(null)}/>}
+          {timelineJob && <TimelineOverlay job={timelineJob} onClose={()=>setTimelineJob(null)} onSave={(id,hist)=>{
+            save(jobs.map(j=>{
+              if(j.id!==id) return j;
+              const newStatus = hist.filter(h=>h.status).slice(-1)[0]?.status || j.status;
+              return {...j, status:newStatus, history:hist};
+            }));
+            setTimelineJob(null);
+          }}/>}
+
+          {/* Header */}
+          <div style={{background:"white",borderBottom:`1.5px solid ${C.border}`,padding:"0 28px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
+            <div style={{display:"flex",alignItems:"center",gap:4}}>
+              <div style={{width:32,height:32,background:C.ink,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",marginRight:16}}>
+                <span style={{color:"white",fontSize:12,fontWeight:800,letterSpacing:"-0.05em"}}>JT</span>
+              </div>
+              {[["dashboard","Overview"],["list","Applications"],["cv","CV Stats"]].map(([v,l])=>(
+                <button key={v} onClick={()=>setView(v)} className={`nav-tab ${view===v?"nav-tab-active":""}`}>{l}</button>
+              ))}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:12,color:C.inkSoft,fontWeight:500}}>{stats.total} applications</span>
+              <button onClick={()=>setShowResetConfirm(true)} style={{background:"transparent",border:"none",fontSize:11,color:C.border,cursor:"pointer",padding:"4px 8px"}}>Reset</button>
+              <button className="btn-cta" onClick={()=>{setForm(EMPTY_FORM);setEditId(null);setAiText("");setView("add");}}>+ Add Job</button>
+            </div>
+          </div>
+
+          <div style={{padding:"32px 28px",maxWidth:1200,margin:"0 auto"}}>
+
+            {/* OVERVIEW */}
+            {view==="dashboard" && (
+              <div>
+                <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:20}}>
+                  <div>
+                    <div style={{fontSize:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>Overview</div>
+                    <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>Your job search at a glance</div>
+                  </div>
+                  <button className="view-link" onClick={()=>setView("list")}>View All Applications</button>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+                  <div className="card" style={{padding:24}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                      <div style={{fontSize:12,color:C.inkSoft,fontWeight:500}}>Total applications</div>
+                      <div style={{display:"flex",gap:4}}>
+                        {["All","Interview","Reject","Offer"].map(t=>(
+                          <button key={t} onClick={()=>setCardFilter(t)} className={`pill-selector${cardFilter===t?" pill-selector-active":""}`}>{t}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{marginBottom:12}}>
+                      <span style={{fontSize:36,fontWeight:800,color:C.ink,letterSpacing:"-0.04em"}}>{cardFilteredJobs.length}</span>
+                    </div>
+                    <div style={{fontSize:12,color:C.inkSoft}}>
+                      You have <span style={{color:C.indigo,fontWeight:700}}>{stats.interviewing} interview{stats.interviewing!==1?"s":""} active</span>.
+                      {stats.offers > 0 && <span style={{color:C.teal,fontWeight:700}}> {stats.offers} offer{stats.offers>1?"s":""} received!</span>}
+                    </div>
+                    <ApplicationsChart jobs={cardFilteredJobs} />
+                  </div>
+
+                  <div className="card" style={{padding:24}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.ink}}>Success Rate</div>
+                      <div style={{display:"flex",gap:4}}>
+                        {["All time","Last 30d"].map(t=>(
+                          <button key={t} onClick={()=>setSuccessFilter(t)} className={`pill-selector${successFilter===t?" pill-selector-active":""}`}>{t}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{marginBottom:4}}>
+                      <span style={{fontSize:36,fontWeight:800,color:C.ink,letterSpacing:"-0.04em"}}>{successStats.rate}</span>
+                      <span style={{fontSize:36,fontWeight:800,color:C.border,letterSpacing:"-0.04em"}}>%</span>
+                    </div>
+                    <div style={{fontSize:12,color:C.inkSoft,marginBottom:16}}>
+                      {successFilter==="Last 30d" ? `Based on ${successJobs.length} applications in the last 30 days` : "Applications reaching screening or further"}
+                    </div>
+                    <div style={{display:"flex",gap:4,alignItems:"flex-end",height:52,marginTop:4}}>
+                      {STATUSES.map((s,i) => {
+                        const count = successJobs.filter(j=>j.status===s).length;
+                        const pct = successJobs.length ? (count/successJobs.length)*100 : 0;
+                        const color = [C.indigo,C.lavender,C.teal,"#3DB870","#F97070",C.inkSoft][i];
+                        return (
+                          <div key={s} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                            <div style={{width:"100%",background:color,borderRadius:"4px 4px 0 0",height:`${Math.max(4,pct*0.48)}px`,transition:"height 0.5s",opacity:0.85}}/>
+                            <div style={{fontSize:9,color:C.inkSoft,fontWeight:600,textAlign:"center",lineHeight:1.2}}>{count}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
+                      {STATUSES.map((s,i)=>{
+                        const color=[C.indigo,C.lavender,C.teal,"#3DB870","#F97070",C.inkSoft][i];
+                        return <div key={s} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:7,height:7,borderRadius:2,background:color}}/><span style={{fontSize:9,color:C.inkSoft}}>{s.split(" ")[0]}</span></div>;
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                  <div style={{fontSize:22,fontWeight:800,color:C.ink,letterSpacing:"-0.03em"}}>Application Details</div>
+                  <button className="view-link" onClick={()=>setView("list")}>View More</button>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:20}}>
+                  <StatCard label="Active Pipeline" value={stats.active} trend={stats.active > 0 ? `${stats.active} open` : null} idx={0}/>
+                  <StatCard label="Interviewing" value={stats.interviewing} trend={stats.interviewing > 0 ? "In progress" : null} idx={1}/>
+                  <StatCard label="Offers" value={stats.offers} trend={stats.offers > 0 ? "Congratulations!" : null} idx={2}/>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"3fr 4fr",gap:16}}>
+                  <div className="card" style={{padding:0,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+                    <div style={{padding:"14px 18px 10px",borderBottom:`1.5px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+                      <span style={{fontSize:14,fontWeight:700,color:C.ink}}>Recent Activity</span>
+                      <button onClick={()=>setActivityView(v=>v==="recent"?"activity":"recent")} className={`pill-selector${activityView==="recent"?" pill-selector-active":""}`}>Recent Application</button>
+                    </div>
+                    <div style={{padding:"0 18px",flex:1,display:"flex",flexDirection:"column"}}>
+                      {activityView==="activity" ? (
+                        recentActivity.length ? recentActivity.map((e,i)=>(
+                          <div key={i} style={{flex:1,display:"flex",alignItems:"center",gap:12,borderBottom:i<recentActivity.length-1?`1px solid ${C.border}`:"none"}}>
+                            <div style={{width:32,height:32,borderRadius:"50%",background:STATUS_META[e.status]?.bg||C.bg,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <div style={{width:10,height:10,borderRadius:"50%",background:STATUS_META[e.status]?.dot||C.inkSoft}}/>
+                            </div>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:700,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.title}</div>
+                              <div style={{fontSize:11,color:C.inkSoft,marginTop:1}}>
+                                {e.type==="note"
+                                  ? `${e.company} — Added a note`
+                                  : e.isFirst
+                                    ? `${e.company} — Application submitted`
+                                    : `${e.company} — Status changed from ${e.prevStatus} to ${e.status}`
+                                }
+                              </div>
+                            </div>
+                          </div>
+                        )) : <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:C.inkSoft,fontSize:13}}>No activity yet</div>
+                      ) : (
+                        recentApplications.length ? recentApplications.map((j,i)=>(
+                          <div key={j.id} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,borderBottom:i<recentApplications.length-1?`1px solid ${C.border}`:"none"}}>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:13,fontWeight:700,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.title}</div>
+                              <div style={{fontSize:11,color:C.inkSoft,marginTop:1}}>{j.company} · {j.date||"—"}</div>
+                            </div>
+                            <StatusBadge status={j.status} onSelect={s=>updateStatus(j.id,s)}/>
+                          </div>
+                        )) : <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:C.inkSoft,fontSize:13}}>No applications yet</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="card" style={{padding:20}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                      <div style={{fontSize:14,fontWeight:700,color:C.ink}}>Application Funnel</div>
+                    </div>
+                    <SankeyDiagram jobs={jobs}/>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* APPLICATIONS */}
+            {view==="list" && (
+              <div>
+                <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:20}}>
+                  <div>
+                    <div style={{fontSize:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>Applications</div>
+                    <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>{filtered.length} of {jobs.length} shown</div>
+                  </div>
+                </div>
+
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flex:1,flexWrap:"wrap"}}>
+                    <div style={{position:"relative",maxWidth:240,flex:1}}>
+                      <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:13,color:C.inkSoft}}>🔍</span>
+                      <input type="text" placeholder="Search position or company…" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+                        style={{paddingLeft:34,width:"100%",border:`1.5px solid ${C.border}`,borderRadius:20,padding:"8px 16px 8px 34px",fontSize:12,color:C.ink,background:"white",outline:"none",fontFamily:"inherit"}}/>
+                      {searchQuery && <button onClick={()=>setSearchQuery("")} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"transparent",border:"none",color:C.inkSoft,cursor:"pointer",fontSize:13}}>✕</button>}
+                    </div>
+                    <button onClick={()=>setShowFilters(o=>!o)} className={`filter-pill ${showFilters?"filter-pill-active":""}`} style={{display:"flex",alignItems:"center",gap:5}}>
+                      ⚙ Filter {activeFilterCount>0&&<span style={{background:showFilters?C.indigo:C.indigoLight,color:showFilters?"white":C.indigo,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700}}>{activeFilterCount}</span>}
+                    </button>
+                    {activeFilterCount>0 && <button onClick={resetFilters} style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer"}}>Clear</button>}
+                  </div>
+                  <button onClick={()=>setColWidths(DEFAULT_COL_WIDTHS)} style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer"}}>Reset columns</button>
+                </div>
+
+                {showFilters && (
+                  <div className="card" style={{padding:16,marginBottom:12,display:"flex",flexWrap:"wrap",gap:20}}>
+                    <div style={{flex:1,minWidth:200}}>
+                      <p style={{fontSize:10,fontWeight:700,color:C.inkSoft,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Status</p>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                        <button onClick={()=>setSelectedStatuses([])} className={`filter-pill ${selectedStatuses.length===0?"filter-pill-active":""}`}>All</button>
+                        {STATUSES.map(s=><button key={s} onClick={()=>toggleStatus(s)} className={`filter-pill ${selectedStatuses.includes(s)?"filter-pill-active":""}`}>{s}</button>)}
+                      </div>
+                    </div>
+                    <div>
+                      <p style={{fontSize:10,fontWeight:700,color:C.inkSoft,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Sort</p>
+                      <div style={{display:"flex",gap:5}}>
+                        {[["desc","Most Recent"],["asc","Oldest First"]].map(([val,lbl])=>(
+                          <button key={val} onClick={()=>setSortOrder(v=>v===val?"none":val)} className={`filter-pill ${sortOrder===val?"filter-pill-active":""}`}>{lbl}</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!filtered.length
+                  ? <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",padding:"48px 0"}}>No applications found</p>
+                  : (
+                    <div className="card" style={{overflow:"hidden"}}>
+                      <div className="scrollbar-hide" style={{maxHeight:460,overflowY:"auto",overflowX:"hidden"}}>
+                        <table style={{borderCollapse:"collapse",width:"100%",tableLayout:"fixed"}}>
+                          <thead style={{position:"sticky",top:0,zIndex:10}}>
+                            <tr>{cols.map(c=><ResizableHeader key={c.key} label={c.label} colKey={c.key} widths={colWidths} onResize={setCol}/>)}</tr>
+                          </thead>
+                          <tbody>
+                            {filtered.map(j=>(
+                              <tr key={j.id} className="trow" style={{borderBottom:`1px solid ${C.border}`}}>
+                                <td style={{padding:"12px 14px",fontWeight:700,color:C.ink,fontSize:13,cursor:"context-menu",overflow:"hidden"}}
+                                  onContextMenu={e=>{e.preventDefault();e.stopPropagation();setCtxMenu({job:j,x:e.clientX,y:e.clientY});}}>
+                                  <span style={{display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={j.title}>{j.title}</span>
+                                </td>
+                                <td style={{padding:"12px 14px",overflow:"hidden"}}><StatusBadge status={j.status} onSelect={s=>updateStatus(j.id,s)}/></td>
+                                <td style={{padding:"12px 14px",overflow:"hidden"}}>
+                                  {j.cv?<span style={{fontSize:11,padding:"3px 10px",background:C.lavLight,color:"#5A2D8A",borderRadius:20,fontWeight:700,display:"inline-block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{j.cv}</span>:<span style={{color:C.border}}>—</span>}
+                                </td>
+                                <td style={{padding:"12px 14px",color:C.inkMid,fontSize:12,fontWeight:500,overflow:"hidden"}}><span style={{display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.company}</span></td>
+                                <td style={{padding:"12px 14px",color:C.inkSoft,fontSize:12,overflow:"hidden",whiteSpace:"nowrap"}}>{j.date}</td>
+                                <td style={{padding:"12px 14px",overflow:"hidden"}}>
+                                  {j.notes?<button onClick={()=>setNoteJob(j)} style={{fontSize:11,color:C.indigo,background:"transparent",border:"none",cursor:"pointer",fontWeight:700,padding:0,textDecoration:"underline",textUnderlineOffset:2}}>View note</button>:<span style={{color:C.border}}>—</span>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                <p style={{fontSize:10,color:C.border,marginTop:6,textAlign:"right"}}>Drag column edges to resize · Right-click a job title for actions</p>
+              </div>
+            )}
+
+            {/* CV STATS */}
+            {view==="cv" && (
+              <div>
+                <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:20}}>
+                  <div>
+                    <div style={{fontSize:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>CV Stats</div>
+                    <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>See which CV version performs best</div>
+                  </div>
+                </div>
+                <CVStatsView cvStats={cvStatsData()}/>
+              </div>
+            )}
+
+            {/* ADD / EDIT */}
+            {view==="add" && (
+              <div>
+                <div style={{marginBottom:24}}>
+                  <div style={{fontSize:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>{editId?"Edit Application":"New Application"}</div>
+                  <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>{editId?"Update the details below":"Fill in the job details"}</div>
+                </div>
+                <div className="card" style={{padding:28,maxWidth:520}}>
+                  {!editId && (
+                    <div style={{display:"flex",gap:6,marginBottom:20}}>
+                      {[["manual","✍️ Manual"],["ai","🤖 AI Auto-fill"]].map(([m,l])=>(
+                        <button key={m} onClick={()=>setAddMode(m)} className={`pill-selector ${addMode===m?"pill-selector-active":""}`} style={{flex:1,padding:"9px 14px",borderRadius:10,fontSize:13}}>{l}</button>
+                      ))}
+                    </div>
+                  )}
+                  {addMode==="ai" && !editId && (
+                    <div style={{marginBottom:20}}>
+                      <div style={{marginBottom:14}}>
+                        <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>Anthropic API Key</label>
+                        <input type="password" placeholder="sk-ant-..." value={apiKey}
+                          onChange={e=>{setApiKey(e.target.value);localStorage.setItem("apiKey",e.target.value);}}
+                          className="app-input"/>
+                        <p style={{fontSize:11,color:C.inkSoft,marginTop:5}}>Saved locally in your browser only.</p>
+                      </div>
+                      <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>Paste job email or description</label>
+                      <textarea className="app-input" style={{height:110,resize:"none",display:"block",lineHeight:1.6}}
+                        placeholder="Paste the job posting, email, or any text here…" value={aiText} onChange={e=>setAiText(e.target.value)}/>
+                      <button className="btn-cta" style={{width:"100%",marginTop:8,borderRadius:10}} onClick={handleAiAutoFill} disabled={aiLoading}>
+                        {aiLoading?"Extracting…":"Auto-fill Fields →"}
+                      </button>
+                    </div>
+                  )}
+                  {(addMode==="manual"||editId) && (
+                    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                      {[["title","Job Title","e.g. Frontend Engineer"],["company","Company","e.g. Acme Corp"],["date","Date Applied",""],["url","Job URL (optional)","https://…"]].map(([k,l,p])=>(
+                        <div key={k}>
+                          <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>{l}</label>
+                          <input type={k==="date"?"date":"text"} placeholder={p} value={form[k]} onChange={e=>setForm({...form,[k]:e.target.value})} className="app-input"/>
+                        </div>
+                      ))}
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>CV Version</label>
+                        <CVInput value={form.cv} onChange={v=>setForm({...form,cv:v})} pastCVs={pastCVs}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>Status</label>
+                        <select value={form.status} onChange={e=>setForm({...form,status:e.target.value})} className="app-input">
+                          {STATUSES.map(s=><option key={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>Notes</label>
+                        <textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Any notes…"
+                          className="app-input" style={{height:80,resize:"none",display:"block",lineHeight:1.6}}/>
+                      </div>
+                      <div style={{display:"flex",gap:8,paddingTop:4}}>
+                        <button className="btn-cta" style={{flex:1,borderRadius:10}} onClick={submitForm}>{editId?"Save Changes":"Add Application"}</button>
+                        <button className="btn-outline" style={{padding:"9px 20px"}} onClick={()=>{setView("list");setEditId(null);setForm(EMPTY_FORM);}}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
