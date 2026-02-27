@@ -9,6 +9,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body { margin: 0; background: #F7F7FB; font-family: 'Sora', system-ui, sans-serif; }
@@ -803,6 +804,21 @@
       };
 
       const deleteJob = id => save(jobs.filter(j=>j.id!==id));
+
+      const exportToExcel = () => {
+        const rows = jobs.map(j => ({
+          "Position":    j.title,
+          "Company":     j.company,
+          "Status":      j.status,
+          "Date":        j.date || "",
+          "CV Version":  j.cv || "",
+          "Notes":       j.notes || "",
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Applications");
+        XLSX.writeFile(wb, "job-tracker.xlsx");
+      };
       const startEdit = job => { setForm(job); setEditId(job.id); setAddMode("manual"); setView("add"); };
       const toggleStatus = s => setSelectedStatuses(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);
       const resetFilters = () => { setSelectedStatuses([]); setSortOrder("none"); };
@@ -1067,7 +1083,10 @@
                     </button>
                     {activeFilterCount>0 && <button onClick={resetFilters} style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer"}}>Clear</button>}
                   </div>
-                  <button onClick={()=>setColWidths(DEFAULT_COL_WIDTHS)} style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer"}}>Reset columns</button>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <button onClick={()=>setColWidths(DEFAULT_COL_WIDTHS)} style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer"}}>Reset columns</button>
+                    <button onClick={exportToExcel} className="filter-pill" style={{display:"flex",alignItems:"center",gap:5,fontWeight:600}}>⬇ Export Excel</button>
+                  </div>
                 </div>
 
                 {showFilters && (
