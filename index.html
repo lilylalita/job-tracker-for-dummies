@@ -12,7 +12,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
-    body { margin: 0; background: #F7F7FB; font-family: 'Sora', system-ui, sans-serif; }
+    html, body { margin: 0; width: 100%; overflow-x: hidden; background: #F7F7FB; font-family: 'Sora', system-ui, sans-serif; }
   </style>
 </head>
 <body>
@@ -22,7 +22,7 @@
     const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
     // ── Palette ────────────────────────────────────────────────────────────────
-    const C = {
+    let C = {
       indigo:     "#6B6BD4",
       indigoLight:"#DEDEFF",
       indigoDim:  "#A8A8E8",
@@ -42,39 +42,98 @@
       white:      "#FFFFFF",
     };
 
-    const STATUSES = ["Applied", "Screening Call", "Interviewing", "Offer", "Rejected", "Ghosted"];
+    const LIGHT_NEUTRALS = { ink:"#0F0F1A", inkMid:"#3D3D5C", inkSoft:"#7A7A9A", border:"#E8E8F2", bg:"#F7F7FB", white:"#FFFFFF" };
+    const DARK_NEUTRALS  = { ink:"#E8E8F0", inkMid:"#A0A0C0", inkSoft:"#6B6B8B", border:"#2D2D4A", bg:"#16161F", white:"#1E1E2E" };
 
-    const STATUS_META = {
-      Applied:          { bg: C.indigoLight, text: "#2D2D8A", dot: C.indigo },
-      "Screening Call": { bg: C.lavLight,    text: "#5A2D8A", dot: C.lavender },
-      Interviewing:     { bg: C.tealLight,   text: "#145E5A", dot: C.teal },
-      Offer:            { bg: "#D0F5E0",     text: "#145030", dot: "#3DB870" },
-      Rejected:         { bg: "#FFE0E0",     text: "#7F1D1D", dot: "#DC2626" },
-      Ghosted:          { bg: "#EEEEF5",     text: "#3D3D5C", dot: C.inkSoft },
+    const THEME_PALETTES = {
+      default: { indigo:"#6B6BD4", indigoLight:"#DEDEFF", indigoDim:"#A8A8E8",
+                 teal:"#4ECDC4", tealLight:"#D0F5F3", orange:"#FF8C42", orangeLight:"#FFF0E0",
+                 pink:"#F0B8D8", pinkLight:"#FDE8F3", lavender:"#C8B8F8", lavLight:"#EDE8FF",
+                 indigoLightDark:"#1E1E4A", tealLightDark:"#0E2E2D", orangeLightDark:"#2A1A0A", pinkLightDark:"#2A0E1E", lavLightDark:"#1A0E3A" },
+      ocean:   { indigo:"#0EA5E9", indigoLight:"#E0F2FE", indigoDim:"#7DD3FC",
+                 teal:"#06B6D4", tealLight:"#CFFAFE", orange:"#F97316", orangeLight:"#FFEDD5",
+                 pink:"#818CF8", pinkLight:"#EEF2FF", lavender:"#A5B4FC", lavLight:"#E0E7FF",
+                 indigoLightDark:"#0A2A4A", tealLightDark:"#062A30", orangeLightDark:"#2A1A0A", pinkLightDark:"#1A1A3A", lavLightDark:"#161632" },
+      forest:  { indigo:"#16A34A", indigoLight:"#DCFCE7", indigoDim:"#86EFAC",
+                 teal:"#65A30D", tealLight:"#ECFCCB", orange:"#F59E0B", orangeLight:"#FEF3C7",
+                 pink:"#34D399", pinkLight:"#D1FAE5", lavender:"#6EE7B7", lavLight:"#ECFDF5",
+                 indigoLightDark:"#062014", tealLightDark:"#0D2600", orangeLightDark:"#1A1000", pinkLightDark:"#092015", lavLightDark:"#052015" },
+      sunset:  { indigo:"#F97316", indigoLight:"#FFEDD5", indigoDim:"#FDBA74",
+                 teal:"#EC4899", tealLight:"#FCE7F3", orange:"#EF4444", orangeLight:"#FEE2E2",
+                 pink:"#F0B8D8", pinkLight:"#FDE8F3", lavender:"#FCA5A5", lavLight:"#FEF2F2",
+                 indigoLightDark:"#2A1200", tealLightDark:"#2A0A1A", orangeLightDark:"#2A0A0A", pinkLightDark:"#2A0A0A", lavLightDark:"#2A0A0A" },
     };
 
-    const STAGE_COLORS = {
-      Applied: C.indigo, "Screening Call": C.lavender, Interviewing: C.teal,
-      Offer: "#3DB870", Rejected: "#F97070", Ghosted: C.inkSoft,
-    };
+    function applyTheme(name, mode) {
+      const palette = THEME_PALETTES[name] || THEME_PALETTES.default;
+      const isDark = mode === "dark" || (mode === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+      const neutrals = isDark ? DARK_NEUTRALS : LIGHT_NEUTRALS;
+      Object.assign(C, {
+        indigo:      palette.indigo,
+        indigoLight: isDark ? palette.indigoLightDark  : palette.indigoLight,
+        indigoDim:   palette.indigoDim,
+        teal:        palette.teal,
+        tealLight:   isDark ? palette.tealLightDark    : palette.tealLight,
+        orange:      palette.orange,
+        orangeLight: isDark ? palette.orangeLightDark  : palette.orangeLight,
+        pink:        palette.pink,
+        pinkLight:   isDark ? palette.pinkLightDark    : palette.pinkLight,
+        lavender:    palette.lavender,
+        lavLight:    isDark ? palette.lavLightDark     : palette.lavLight,
+        ...neutrals,
+      });
+      document.body.style.background = C.bg;
+      document.documentElement.style.background = C.bg;
+    }
 
-    const STAT_CARDS = [
+    // Apply saved theme synchronously before first render (no flash)
+    applyTheme(
+      localStorage.getItem("appTheme") || "default",
+      localStorage.getItem("appThemeMode") || "light"
+    );
+
+    const COLOR_PRESETS = [
+      { label:"Indigo",   dot:"#6B6BD4", bg:"#DEDEFF", text:"#2D2D8A" },
+      { label:"Lavender", dot:"#C8B8F8", bg:"#EDE8FF", text:"#5A2D8A" },
+      { label:"Teal",     dot:"#4ECDC4", bg:"#D0F5F3", text:"#145E5A" },
+      { label:"Green",    dot:"#3DB870", bg:"#D0F5E0", text:"#145030" },
+      { label:"Orange",   dot:"#FF8C42", bg:"#FFF0E0", text:"#8A4200" },
+      { label:"Pink",     dot:"#F0B8D8", bg:"#FDE8F3", text:"#8A2D5A" },
+      { label:"Red",      dot:"#DC2626", bg:"#FFE0E0", text:"#7F1D1D" },
+      { label:"Gray",     dot:"#7A7A9A", bg:"#EEEEF5", text:"#3D3D5C" },
+    ];
+
+    const DEFAULT_STATUS_CONFIG = [
+      { name:"Applied",   dot:"#6B6BD4", bg:"#DEDEFF", text:"#2D2D8A", stage_order:0, protected:true, type:"progress" },
+      { name:"No Answer", dot:"#7A7A9A", bg:"#EEEEF5", text:"#3D3D5C", stage_order:1, protected:true, type:"terminal" },
+      { name:"Interview", dot:"#4ECDC4", bg:"#D0F5F3", text:"#145E5A", stage_order:2,                 type:"progress" },
+      { name:"Offer",     dot:"#3DB870", bg:"#D0F5E0", text:"#145030", stage_order:3,                 type:"progress" },
+      { name:"Rejected",  dot:"#DC2626", bg:"#FFE0E0", text:"#7F1D1D", stage_order:1,                 type:"terminal" },
+    ];
+
+    // Legacy fallbacks used before context is available
+    const STATUSES = DEFAULT_STATUS_CONFIG.map(s => s.name);
+    const STATUS_META = Object.fromEntries(DEFAULT_STATUS_CONFIG.map(s => [s.name, { bg:s.bg, text:s.text, dot:s.dot }]));
+    const STAGE_COLORS = Object.fromEntries(DEFAULT_STATUS_CONFIG.map(s => [s.name, s.dot]));
+
+    const StatusContext = React.createContext({ statuses: STATUSES, statusMeta: STATUS_META, stageColors: STAGE_COLORS, statusConfig: DEFAULT_STATUS_CONFIG });
+
+    const getStatCards = () => [
       { bg: C.indigoLight, accent: "#2D2D8A", border: C.indigoDim },
       { bg: C.pinkLight,   accent: "#8A2D5A", border: C.pink },
       { bg: C.lavLight,    accent: "#5A2D8A", border: C.lavender },
       { bg: C.tealLight,   accent: "#145E5A", border: C.teal },
     ];
 
-    const CV_PALETTE = [C.indigo, C.teal, C.orange, "#3DB870", C.lavender, "#F97070", "#5A8ADE", C.pink];
     const EMPTY_FORM = { title:"", company:"", date:"", status:"Applied", cv:"", notes:"", url:"" };
 
-    const SEED_JOBS = [{"id":"1","title":"Digital Designer","company":"First Page","date":"","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"2","title":"Midweight Digital Designer","company":"Craft","date":"2026-02-14","status":"Applied","cv":"LilyLalita_MidweightDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"3","title":"Senior Digital Designer","company":"Absolute Nexa","date":"2026-02-27","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"4","title":"Midweight Designer","company":"The Fresh Group","date":"2026-02-17","status":"Applied","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"5","title":"Digital Graphic Designer","company":"Wood Mackenzie","date":"2026-02-27","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"6","title":"Visual Designer","company":"Great Value Hiring","date":"2026-02-27","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"7","title":"Mid-weight Digital Designer","company":"ROCKETO","date":"2026-02-24","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"8","title":"Product Designer (mid level)","company":"&Dine","date":"2026-02-16","status":"Applied","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"9","title":"Presentation & Graphic Designer","company":"IGN","date":"2026-02-25","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"10","title":"Product Designer","company":"EverAI","date":"2026-02-26","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"11","title":"Product Designer","company":"Revolut","date":"2026-02-18","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"12","title":"Associate Product Designer","company":"Alpha Insight","date":"2026-02-18","status":"Rejected","cv":"","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"13","title":"Marketing Designer","company":"Funding Circle","date":"2026-02-18","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"14","title":"Product Designer","company":"Palantir","date":"2026-02-18","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"15","title":"Product Designer","company":"Tombola","date":"2026-01-21","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"16","title":"UX Designer","company":"GammaLabs","date":"2025-02-19","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"17","title":"Junior Product Designer","company":"Bending Spoon","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"18","title":"CRM Designer","company":"Wise","date":"2026-02-16","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"19","title":"Visual Designer (CRM & in-app)","company":"Wise","date":"2026-02-10","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"20","title":"Graphic Designer","company":"Mercor","date":"2026-01-27","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"21","title":"UX/UI Designer","company":"Gregg","date":"2026-01-14","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"22","title":"Senior Digital Product Designer","company":"IBM","date":"2026-01-14","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"23","title":"Design Associate","company":"IBM","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_MidweightDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"24","title":"Visual Designer","company":"IBM","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_VisualCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"25","title":"Midweight Graphic Designer","company":"AtkinsRealis","date":"2026-02-22","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"26","title":"Product Designer","company":"SafetyWing","date":"2026-02-23","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"27","title":"Senior Marketing Designer","company":"Railsware","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"28","title":"Brand Design","company":"ElevenLabs","date":"2026-02-23","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"29","title":"Product Designer","company":"Pixel Force","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"30","title":"UX/UI Product Designer","company":"SGB - Singapore","date":"2026-02-23","status":"Applied","cv":"LilyLalita_DigitalExperienceDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"31","title":"Freelance Senior Graphic Designer","company":"Snugg","date":"2026-02-24","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"32","title":"Digital Designer","company":"Evo Agency","date":"2026-02-19","status":"Interviewing","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interviewing","timestamp":null}]},{"id":"33","title":"Brand and Product Designer","company":"Privalgo","date":"2026-02-19","status":"Screening Call","cv":"LilyLalita_CV_BrandLedGrowth","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Screening Call","timestamp":null}]},{"id":"34","title":"Digital Designer","company":"NRLA","date":"2026-02-10","status":"Interviewing","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interviewing","timestamp":null}]},{"id":"35","title":"UX Designer","company":"Adria Solutions","date":"2026-02-24","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"36","title":"UX/UI Designer","company":"Genie Venture","date":"2026-02-19","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"37","title":"Content Designer","company":"Rightmove","date":"2026-02-14","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"38","title":"Digital Project Manager","company":"G&T (Girl & Tech)","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_CV_BrandLedGrowth","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"39","title":"Creative Designer","company":"Frontier Development","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"40","title":"Brand Design","company":"Ben","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"41","title":"Graphic Designer","company":"Team RH Fitness Ltd","date":"2026-02-19","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"42","title":"Figma UI Designer","company":"Luther Tech - Remote","date":"2026-02-26","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"43","title":"Brand Designer","company":"Happl","date":"2026-02-25","status":"Interviewing","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interviewing","timestamp":null}]},{"id":"44","title":"Brand Designer","company":"Superside","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]}];
+    const SEED_JOBS = [{"id":"1","title":"Digital Designer","company":"First Page","date":"","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"2","title":"Midweight Digital Designer","company":"Craft","date":"2026-02-14","status":"Applied","cv":"LilyLalita_MidweightDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"3","title":"Senior Digital Designer","company":"Absolute Nexa","date":"2026-02-27","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"4","title":"Midweight Designer","company":"The Fresh Group","date":"2026-02-17","status":"Applied","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"5","title":"Digital Graphic Designer","company":"Wood Mackenzie","date":"2026-02-27","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"6","title":"Visual Designer","company":"Great Value Hiring","date":"2026-02-27","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"7","title":"Mid-weight Digital Designer","company":"ROCKETO","date":"2026-02-24","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"8","title":"Product Designer (mid level)","company":"&Dine","date":"2026-02-16","status":"Applied","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"9","title":"Presentation & Graphic Designer","company":"IGN","date":"2026-02-25","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"10","title":"Product Designer","company":"EverAI","date":"2026-02-26","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"11","title":"Product Designer","company":"Revolut","date":"2026-02-18","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"12","title":"Associate Product Designer","company":"Alpha Insight","date":"2026-02-18","status":"Rejected","cv":"","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"13","title":"Marketing Designer","company":"Funding Circle","date":"2026-02-18","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"14","title":"Product Designer","company":"Palantir","date":"2026-02-18","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"15","title":"Product Designer","company":"Tombola","date":"2026-01-21","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"16","title":"UX Designer","company":"GammaLabs","date":"2025-02-19","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"17","title":"Junior Product Designer","company":"Bending Spoon","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"18","title":"CRM Designer","company":"Wise","date":"2026-02-16","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"19","title":"Visual Designer (CRM & in-app)","company":"Wise","date":"2026-02-10","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"20","title":"Graphic Designer","company":"Mercor","date":"2026-01-27","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"21","title":"UX/UI Designer","company":"Gregg","date":"2026-01-14","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"22","title":"Senior Digital Product Designer","company":"IBM","date":"2026-01-14","status":"Rejected","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"23","title":"Design Associate","company":"IBM","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_MidweightDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"24","title":"Visual Designer","company":"IBM","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_VisualCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"25","title":"Midweight Graphic Designer","company":"AtkinsRealis","date":"2026-02-22","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"26","title":"Product Designer","company":"SafetyWing","date":"2026-02-23","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"27","title":"Senior Marketing Designer","company":"Railsware","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"28","title":"Brand Design","company":"ElevenLabs","date":"2026-02-23","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"29","title":"Product Designer","company":"Pixel Force","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"30","title":"UX/UI Product Designer","company":"SGB - Singapore","date":"2026-02-23","status":"Applied","cv":"LilyLalita_DigitalExperienceDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"31","title":"Freelance Senior Graphic Designer","company":"Snugg","date":"2026-02-24","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"32","title":"Digital Designer","company":"Evo Agency","date":"2026-02-19","status":"Interview","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interview","timestamp":null}]},{"id":"33","title":"Brand and Product Designer","company":"Privalgo","date":"2026-02-19","status":"Interview","cv":"LilyLalita_CV_BrandLedGrowth","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interview","timestamp":null}]},{"id":"34","title":"Digital Designer","company":"NRLA","date":"2026-02-10","status":"Interview","cv":"LilyLalita_CV-Nov","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interview","timestamp":null}]},{"id":"35","title":"UX Designer","company":"Adria Solutions","date":"2026-02-24","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"36","title":"UX/UI Designer","company":"Genie Venture","date":"2026-02-19","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"37","title":"Content Designer","company":"Rightmove","date":"2026-02-14","status":"Rejected","cv":"LilyLalita_ProductCV","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"38","title":"Digital Project Manager","company":"G&T (Girl & Tech)","date":"2026-02-19","status":"Rejected","cv":"LilyLalita_CV_BrandLedGrowth","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"39","title":"Creative Designer","company":"Frontier Development","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"40","title":"Brand Design","company":"Ben","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]},{"id":"41","title":"Graphic Designer","company":"Team RH Fitness Ltd","date":"2026-02-19","status":"Applied","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"42","title":"Figma UI Designer","company":"Luther Tech - Remote","date":"2026-02-26","status":"Applied","cv":"LilyLalita_UXUIDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null}]},{"id":"43","title":"Brand Designer","company":"Happl","date":"2026-02-25","status":"Interview","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Interview","timestamp":null}]},{"id":"44","title":"Brand Designer","company":"Superside","date":"2026-02-23","status":"Rejected","cv":"LilyLalita_SeniorDigitalDesigner","notes":"","url":"","history":[{"status":"Applied","timestamp":null},{"status":"Rejected","timestamp":null}]}];
     const DEFAULT_COL_WIDTHS = { title:160, status:145, cv:110, company:130, date:110, notes:100 };
 
-    const styles = `
+    const makeStyles = () => `
       *, *::before, *::after { box-sizing: border-box; font-family: 'Sora', system-ui, sans-serif !important; }
-      body { background: ${C.bg}; margin: 0; }
-      .app-root { min-height: 100vh; background: ${C.bg}; }
+      html, body { background: ${C.bg}; margin: 0; width: 100%; overflow-x: hidden; }
+      .app-root { min-height: 100vh; background: ${C.bg}; width: 100%; overflow-x: hidden; }
       .scrollbar-hide::-webkit-scrollbar { display: none; }
       .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       .card {
@@ -82,6 +141,7 @@
         border-radius: 16px;
         border: 1.5px solid ${C.border};
         box-shadow: 0 1px 4px rgba(15,15,26,0.04), 0 4px 16px rgba(15,15,26,0.04);
+        min-width: 0;
       }
       .app-input {
         border: 1.5px solid ${C.border};
@@ -173,12 +233,46 @@
         letter-spacing: -0.01em;
       }
       .view-link:hover { color: ${C.indigo}; }
+      /* ── Responsive layout classes ─────────────────────────────────────── */
+      .resp-grid-2   { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:20px; }
+      .resp-grid-3   { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:20px; }
+      .resp-grid-act { display:grid; grid-template-columns:3fr 4fr; gap:16px; }
+      .resp-pad      { padding:32px 28px; max-width:1200px; margin:0 auto; width:100%; }
+      /* tablet: 769–1024px — top 2 cards stay side-by-side, lower sections stack */
+      @media (max-width:1024px) {
+        .resp-grid-3   { grid-template-columns:1fr; }
+        .resp-grid-act { grid-template-columns:1fr; }
+        .resp-pad      { padding:24px 20px; }
+        .pill-selector { padding:4px 9px; font-size:11px; }
+      }
+      /* mobile: ≤768px — everything stacks */
+      @media (max-width:768px) {
+        .resp-grid-2   { grid-template-columns:1fr; }
+        .resp-grid-3   { grid-template-columns:1fr; }
+        .resp-grid-act { grid-template-columns:1fr; }
+        .resp-pad      { padding:20px 16px; }
+        .hide-mobile   { display:none !important; }
+        .nav-tab       { padding:10px 14px; font-size:13px; }
+      }
+      @media (max-width:480px) {
+        .resp-pad { padding:16px 12px; }
+      }
     `;
 
     function formatDateTime(iso) {
       if (!iso) return "";
       const d = new Date(iso);
       return d.toLocaleDateString("en-GB", { day:"numeric", month:"short", year:"numeric" }) + " · " + d.toLocaleTimeString("en-GB", { hour:"2-digit", minute:"2-digit" });
+    }
+
+    function useWindowWidth() {
+      const [width, setWidth] = useState(window.innerWidth);
+      useEffect(() => {
+        const handler = () => setWidth(window.innerWidth);
+        window.addEventListener('resize', handler);
+        return () => window.removeEventListener('resize', handler);
+      }, []);
+      return width;
     }
 
     // ── Sparkline ─────────────────────────────────────────────────────────────
@@ -196,33 +290,54 @@
     }
 
     // ── Sankey ────────────────────────────────────────────────────────────────
-    function SankeyDiagram({ jobs }) {
-      const W = 560, H = 360, NODE_W = 16;
-      const FUNNEL_COL = { "Applied":0, "Screening Call":1, "Interviewing":2, "Offer":3 };
-      const EXIT_COL   = { "Rejected":4, "Ghosted":4 };
-      const ALL_COL    = { ...FUNNEL_COL, ...EXIT_COL };
+    function SankeyDiagram({ jobs, compact = false, scale: scaleProp }) {
+      const scale = scaleProp ?? (compact ? 260 : 360);
+      const { statusConfig } = React.useContext(StatusContext);
 
-      // Strict counts — only jobs currently at each status
-      const counts = useMemo(() => {
-        const c = {}; Object.keys(STAGE_COLORS).forEach(s => c[s] = 0);
-        jobs.forEach(j => { if (c[j.status] !== undefined) c[j.status]++; });
-        return c;
-      }, [jobs]);
+      const sortedConfig = useMemo(() =>
+        [...statusConfig].sort((a, b) => a.stage_order - b.stage_order)
+      , [statusConfig]);
 
-      // Actual transitions from history
-      const flows = useMemo(() => {
-        const t = {};
-        jobs.forEach(j => {
-          const h = (j.history || []).filter(x => x.status);
-          for (let i = 0; i < h.length - 1; i++) {
-            if (h[i].status !== h[i+1].status) {
-              const key = `${h[i].status}|||${h[i+1].status}`;
-              t[key] = (t[key] || 0) + 1;
+      const sourceStatus = sortedConfig[0];
+
+      const statusMap = useMemo(() =>
+        Object.fromEntries(statusConfig.map(s => [s.name, s]))
+      , [statusConfig]);
+
+      const noAnswerStatus = useMemo(() =>
+        statusConfig.find(s => s.protected && s.name !== sourceStatus.name)
+      , [statusConfig, sourceStatus]);
+
+      // ── Compute flows ─────────────────────────────────────────────────────
+      const { flows, noAnswerCount, inflow } = useMemo(() => {
+        const flows = {};
+        const inflow = {};
+        let noAnswerCount = 0;
+        jobs.forEach(job => {
+          const hist = (job.history || []).filter(h => h.status);
+          const seq = [];
+          hist.forEach(h => { if (!seq.length || seq[seq.length-1] !== h.status) seq.push(h.status); });
+          if (job.status && seq[seq.length-1] !== job.status) seq.push(job.status);
+          const nonSource = seq.filter(s => s !== sourceStatus.name);
+          if (nonSource.length === 0) {
+            if (noAnswerStatus) {
+              const key = `${sourceStatus.name}|||${noAnswerStatus.name}`;
+              flows[key] = (flows[key] || 0) + 1;
+              inflow[noAnswerStatus.name] = (inflow[noAnswerStatus.name] || 0) + 1;
+            } else { noAnswerCount++; }
+          } else {
+            for (let i = 0; i < seq.length - 1; i++) {
+              if (seq[i] !== seq[i+1]) {
+                const key = `${seq[i]}|||${seq[i+1]}`;
+                flows[key] = (flows[key] || 0) + 1;
+                inflow[seq[i+1]] = (inflow[seq[i+1]] || 0) + 1;
+              }
             }
           }
         });
-        return t;
-      }, [jobs]);
+        if (noAnswerCount > 0) inflow['__no_answer__'] = noAnswerCount;
+        return { flows, noAnswerCount, inflow };
+      }, [jobs, sourceStatus, noAnswerStatus]);
 
       if (!jobs.length) return (
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:80,color:C.inkSoft,fontSize:13}}>
@@ -230,70 +345,217 @@
         </div>
       );
 
-      const total = jobs.length || 1;
-      const MAX_H = 76, MIN_H = 10;
-      const nH = s => Math.max(MIN_H, Math.round((counts[s] / total) * MAX_H));
+      const totalJobs = jobs.length;
+      const MIN_H     = 20;
+      const NODE_W    = 16;
+      const PAD_L     = 110, PAD_R = 170, PAD_Y = 44;
+      const STEP_X    = 170;  // horizontal step per progress node
+      const TERM_GAP  = 14;   // gap between stacked terminal nodes
+      const PROG_GAP  = 22;   // gap between stacked progress nodes
 
-      const PAD_X=20, PAD_Y=36, colSpacing=(W-PAD_X*2-NODE_W)/4;
-      const colX = i => PAD_X + i * colSpacing;
-      const ROW_SPACING = (H - PAD_Y*2) / 3;
-      const funnelY = i => PAD_Y + i * ROW_SPACING;
-      const exitY = { "Rejected": PAD_Y + ROW_SPACING*0.5, "Ghosted": PAD_Y + ROW_SPACING*1.8 };
-      const nodeY = s => FUNNEL_COL[s] !== undefined ? funnelY(FUNNEL_COL[s]) : exitY[s];
+      // ── Classify destination nodes ────────────────────────────────────────
+      const nonSource    = sortedConfig.filter(s => s.name !== sourceStatus.name);
+      const usedNames    = new Set(Object.keys(inflow).filter(k => k !== '__no_answer__'));
+      const visibleStats = nonSource.filter(s => usedNames.has(s.name));
 
-      const band = (x1,top1,bot1,x2,top2,bot2,color) => {
-        const cx = (x1+x2)/2;
-        return <path d={`M${x1},${top1} C${cx},${top1} ${cx},${top2} ${x2},${top2} L${x2},${bot2} C${cx},${bot2} ${cx},${bot1} ${x1},${bot1} Z`} fill={color} fillOpacity={0.25}/>;
+      // progress nodes: diagonal staircase (left → right, stepping down)
+      const progressNodes = visibleStats
+        .filter(s => (s.type ?? "progress") === "progress")
+        .sort((a, b) => a.stage_order - b.stage_order || a.name.localeCompare(b.name));
+
+      // terminal nodes except the protected No Answer (handled separately)
+      const otherTerminals = visibleStats
+        .filter(s => (s.type ?? "progress") === "terminal" && !s.protected)
+        .sort((a, b) => a.stage_order - b.stage_order || a.name.localeCompare(b.name));
+
+      const numProgress = progressNodes.length;
+      const srcBarX = PAD_L;
+      const srcY    = PAD_Y;
+
+      // Terminal column sits one STEP_X beyond the last progress node
+      const rightX = srcBarX + NODE_W + (numProgress + 1) * STEP_X;
+      const W      = rightX + NODE_W + PAD_R;
+
+      const nodeH = name => {
+        if (name === '__no_answer__') return Math.max(MIN_H, Math.round((noAnswerCount / totalJobs) * scale));
+        return Math.max(MIN_H, Math.round(((inflow[name] || 0) / totalJobs) * scale));
       };
 
-      const flowBands = Object.entries(flows).map(([key, count]) => {
-        const [from, to] = key.split("|||");
-        const fc = ALL_COL[from], tc = ALL_COL[to];
-        if (fc === undefined || tc === undefined) return null;
-        const fromH = nH(from), toH = nH(to);
-        const bFrom = Math.max(4, Math.round((count / Math.max(counts[from],1)) * fromH));
-        const bTo   = Math.max(4, Math.round((count / Math.max(counts[to],1))   * toH));
-        const fy = nodeY(from), ty = nodeY(to);
-        return (
-          <g key={key}>{band(
-            colX(fc)+NODE_W, fy+(fromH-bFrom)/2, fy+(fromH+bFrom)/2,
-            colX(tc),        ty+(toH-bTo)/2,     ty+(toH+bTo)/2,
-            STAGE_COLORS[from]
-          )}</g>
-        );
+      // ── Assign (x, y) to every node ──────────────────────────────────────
+      const nodeXMap = {};
+      const nodeYMap = {};
+
+      // Primary terminal (No Answer / virtual) at top of rightX column
+      let termY = srcY;
+      const primaryName = noAnswerStatus && (inflow[noAnswerStatus.name] || 0) > 0
+        ? noAnswerStatus.name
+        : (noAnswerCount > 0 ? '__no_answer__' : null);
+
+      if (primaryName) {
+        nodeXMap[primaryName] = rightX;
+        nodeYMap[primaryName] = termY;
+        termY += nodeH(primaryName) + TERM_GAP;
+      }
+
+      // Other terminal nodes stacked below (Rejected, etc.)
+      otherTerminals.forEach(s => {
+        nodeXMap[s.name] = rightX;
+        nodeYMap[s.name] = termY;
+        termY += nodeH(s.name) + TERM_GAP;
       });
 
+      // Progress X positions needed by Phase 2 for edge filtering (Y set after Phase 3)
+      progressNodes.forEach((s, i) => { nodeXMap[s.name] = srcBarX + NODE_W + (i + 1) * STEP_X; });
+
+      // ── PHASE 2: Build edge list (needs nodeXMap for backward-flow filter) ─
+      const allEdges = [];
+      if (noAnswerCount > 0) allEdges.push({ from: sourceStatus.name, to: '__no_answer__', count: noAnswerCount });
+      Object.entries(flows).forEach(([key, count]) => {
+        const [from, to] = key.split('|||');
+        if (nodeXMap[to] === undefined) return;
+        if (from !== sourceStatus.name && nodeXMap[from] === undefined) return;
+        if (from !== sourceStatus.name && (nodeXMap[from] ?? 0) >= (nodeXMap[to] ?? rightX)) return;
+        allEdges.push({ from, to, count });
+      });
+
+      // First sort: terminals first (by descending X), tiebreak by name
+      allEdges.sort((a, b) => {
+        const ax = nodeXMap[a.to] ?? rightX, bx = nodeXMap[b.to] ?? rightX;
+        return ax !== bx ? bx - ax : a.to.localeCompare(b.to);
+      });
+
+      // ── PHASE 3: Pre-compute source band heights (sum = scale exactly) ────
+      const srcEdges = allEdges.filter(e => e.from === sourceStatus.name);
+      const shMap = {};
+      {
+        const total = srcEdges.reduce((a, e) => a + e.count, 0) || 1;
+        let rem = scale;
+        srcEdges.forEach((e, i) => {
+          const key = `${e.from}|||${e.to}`;
+          if (i === srcEdges.length - 1) { shMap[key] = Math.max(2, rem); }
+          else { const h = Math.max(2, Math.round((e.count / total) * scale)); shMap[key] = h; rem -= h; }
+        });
+      }
+
+      // ── PHASE 4: Y positions for progress nodes (terminal Y already set above) ─
+      const terminalSrcH = srcEdges
+        .filter(e => (nodeXMap[e.to] ?? 0) === rightX)
+        .reduce((a, e) => a + (shMap[`${e.from}|||${e.to}`] ?? 0), 0);
+      let progY = srcY + terminalSrcH + 28;
+      progressNodes.forEach(s => { nodeYMap[s.name] = progY; progY += nodeH(s.name) + PROG_GAP; });
+
+      // Re-sort now that Y positions exist (same-X destinations ordered by Y)
+      allEdges.sort((a, b) => {
+        const ax = nodeXMap[a.to] ?? rightX, bx = nodeXMap[b.to] ?? rightX;
+        return ax !== bx ? bx - ax : (nodeYMap[a.to] ?? 0) - (nodeYMap[b.to] ?? 0);
+      });
+
+      // SVG height
+      const H = Math.max(srcY + scale, ...Object.keys(nodeYMap).map(n => nodeYMap[n] + nodeH(n))) + PAD_Y;
+
+      // ── PHASE 5: Pre-compute ALL band heights — exact fills, zero overflow ─
+      // Outgoing bands from each intermediate node must sum to nodeH(from)
+      const groupByFrom = {};
+      allEdges.filter(e => e.from !== sourceStatus.name)
+        .forEach(e => { (groupByFrom[e.from] = groupByFrom[e.from] || []).push(e); });
+      Object.entries(groupByFrom).forEach(([from, edges]) => {
+        const fh = nodeH(from), total = edges.reduce((a, e) => a + e.count, 0) || 1;
+        let rem = fh;
+        edges.forEach((e, i) => {
+          const key = `${e.from}|||${e.to}`;
+          if (i === edges.length - 1) { shMap[key] = Math.max(2, rem); }
+          else { const h = Math.max(2, Math.round((e.count / total) * fh)); shMap[key] = h; rem -= h; }
+        });
+      });
+
+      // Incoming bands to each destination must sum to nodeH(to)
+      const dhMap = {};
+      const groupByTo = {};
+      allEdges.forEach(e => { (groupByTo[e.to] = groupByTo[e.to] || []).push(e); });
+      Object.entries(groupByTo).forEach(([to, edges]) => {
+        const dh = nodeH(to), total = inflow[to] || edges.reduce((a, e) => a + e.count, 0) || 1;
+        let rem = dh;
+        edges.forEach((e, i) => {
+          const key = `${e.from}|||${e.to}`;
+          if (i === edges.length - 1) { dhMap[key] = Math.max(2, rem); }
+          else { const h = Math.max(2, Math.round((e.count / total) * dh)); dhMap[key] = h; rem -= h; }
+        });
+      });
+
+      // ── PHASE 6: Draw bands using pre-computed exact heights ──────────────
+      const outUsed = {}, inUsed = {};
+      let srcBarUsed = 0;
+
+      const bands = allEdges.map(({ from, to }) => {
+        const key          = `${from}|||${to}`;
+        const fromIsSource = from === sourceStatus.name;
+        const x1 = fromIsSource ? srcBarX + NODE_W : (nodeXMap[from] ?? srcBarX) + NODE_W;
+        const x2 = nodeXMap[to] ?? rightX;
+        const sh = shMap[key] ?? 2;
+        const sy1 = fromIsSource ? srcY + srcBarUsed : (nodeYMap[from] ?? srcY) + (outUsed[from] || 0);
+        if (fromIsSource) srcBarUsed += sh; else outUsed[from] = (outUsed[from] || 0) + sh;
+
+        const dh  = dhMap[key] ?? 2;
+        const dy1 = (nodeYMap[to] ?? srcY) + (inUsed[to] || 0);
+        inUsed[to] = (inUsed[to] || 0) + dh;
+
+        const color = to === '__no_answer__' ? (noAnswerStatus?.dot || C.inkSoft) : (statusMap[to]?.dot || C.inkSoft);
+        const span = x2 - x1, cx1 = x1 + span * 0.55, cx2 = x1 + span * 0.45;
+
+        return (
+          <path key={key}
+            d={`M${x1},${sy1} C${cx1},${sy1} ${cx2},${dy1} ${x2},${dy1} L${x2},${dy1+dh} C${cx2},${dy1+dh} ${cx1},${sy1+sh} ${x1},${sy1+sh} Z`}
+            fill={color} fillOpacity={0.3}
+          />
+        );
+      }).filter(Boolean);
+
+      // ── Render ────────────────────────────────────────────────────────────
+      const midY = srcY + scale / 2;
+
+      const NodeLabel = ({ name, x, dot, count, label }) => {
+        const y = nodeYMap[name]; if (y === undefined) return null;
+        const h = nodeH(name), cy = y + h / 2;
+        return (
+          <g>
+            <rect x={x} y={y} width={NODE_W} height={h} rx={3} fill={dot} fillOpacity={0.85}/>
+            <text x={x + NODE_W + 10} y={cy - 5} textAnchor="start" fontSize={12} fill={C.ink} fontWeight="700">{count}</text>
+            <text x={x + NODE_W + 10} y={cy + 9} textAnchor="start" fontSize={10} fill={C.inkSoft}>{label}</text>
+          </g>
+        );
+      };
+
       return (
-        <div style={{overflowX:"auto"}}>
-          <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{minWidth:340}}>
-            {flowBands}
-            {Object.entries(FUNNEL_COL).map(([stage, col]) => {
-              const x=colX(col), y=funnelY(col), h=nH(stage);
-              return (
-                <g key={stage}>
-                  <rect x={x} y={y} width={NODE_W} height={h} rx={5} fill={STAGE_COLORS[stage]}/>
-                  <text x={x+NODE_W/2} y={y-10} textAnchor="middle" fontSize={9} fill={C.inkSoft} fontWeight="600">{stage==="Screening Call"?"Screening":stage}</text>
-                  <text x={x+NODE_W/2} y={y+h+14} textAnchor="middle" fontSize={12} fill={C.ink} fontWeight="700">{counts[stage]}</text>
-                  {col>0 && <text x={x+NODE_W/2} y={y+h+27} textAnchor="middle" fontSize={9} fill={C.inkSoft}>{Math.round((counts[stage]/total)*100)}%</text>}
-                </g>
-              );
-            })}
-            {["Rejected","Ghosted"].map(es => {
-              if (!counts[es]) return null;
-              const x=colX(4), y=exitY[es], h=nH(es);
-              return (
-                <g key={es}>
-                  <rect x={x} y={y} width={NODE_W} height={h} rx={5} fill={STAGE_COLORS[es]}/>
-                  <text x={x+NODE_W/2} y={y-10} textAnchor="middle" fontSize={9} fill={C.inkSoft} fontWeight="600">{es}</text>
-                  <text x={x+NODE_W/2} y={y+h+14} textAnchor="middle" fontSize={12} fill={C.ink} fontWeight="700">{counts[es]}</text>
-                  <text x={x+NODE_W/2} y={y+h+27} textAnchor="middle" fontSize={9} fill={C.inkSoft}>{Math.round((counts[es]/total)*100)}%</text>
-                </g>
-              );
-            })}
+        <div style={{overflowX:"auto", overflowY:"visible", WebkitOverflowScrolling:"touch"}}>
+          <svg width={W} height={H} style={{display:"block", minWidth:W}}>
+            {bands}
+
+            {/* Source bar */}
+            <rect x={srcBarX} y={srcY} width={NODE_W} height={scale} rx={5} fill={C.inkSoft} fillOpacity={0.4}/>
+            <text x={srcBarX - 10} y={midY - 6} textAnchor="end" fontSize={14} fill={C.ink} fontWeight="800">{totalJobs}</text>
+            <text x={srcBarX - 10} y={midY + 10} textAnchor="end" fontSize={10} fill={C.inkSoft}>Applications</text>
+
+            {/* Primary terminal (No Answer) — top of right column */}
+            {primaryName && (
+              <NodeLabel name={primaryName} x={rightX}
+                dot={noAnswerStatus?.dot || C.inkSoft}
+                count={primaryName === '__no_answer__' ? noAnswerCount : (inflow[primaryName] || 0)}
+                label={primaryName === '__no_answer__' ? (noAnswerStatus?.name || 'No Answer') : primaryName}
+              />
+            )}
+
+            {/* Other terminals (Rejected, etc.) stacked below No Answer */}
+            {otherTerminals.map(s => (
+              <NodeLabel key={s.name} name={s.name} x={rightX} dot={s.dot}
+                count={inflow[s.name] || 0} label={s.name}/>
+            ))}
+
+            {/* Progress nodes — diagonal staircase overlapping the No Answer band horizontally */}
+            {progressNodes.map(s => (
+              <NodeLabel key={s.name} name={s.name} x={nodeXMap[s.name] ?? srcBarX} dot={s.dot}
+                count={inflow[s.name] || 0} label={s.name}/>
+            ))}
           </svg>
-          <div style={{display:"flex",flexWrap:"wrap",gap:10,marginTop:6}}>
-            {Object.entries(STAGE_COLORS).map(([s,col])=><div key={s} style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:2,background:col}}/><span style={{fontSize:11,color:C.inkSoft,fontWeight:500}}>{s}</span></div>)}
-          </div>
         </div>
       );
     }
@@ -325,7 +587,8 @@
           <p style={{color:C.inkSoft,fontSize:13}}>Add applications with CV versions to see stats</p>
         </div>
       );
-      const slices = cvStats.map((cv,i)=>({name:cv.name,pct:metric==="success"?cv.successRate:cv.offerRate,total:cv.total,color:CV_PALETTE[i%CV_PALETTE.length]}));
+      const cvPalette = [C.indigo, C.teal, C.orange, "#3DB870", C.lavender, "#F97070", "#5A8ADE", C.pink];
+      const slices = cvStats.map((cv,i)=>({name:cv.name,pct:metric==="success"?cv.successRate:cv.offerRate,total:cv.total,color:cvPalette[i%cvPalette.length]}));
       const avgPct = Math.round(slices.reduce((a,s)=>a+s.pct,0)/cvStats.length);
       const totalPct = slices.reduce((a,s)=>a+s.pct,0)||1;
       const normSlices = slices.map(s=>({...s,pct:(s.pct/totalPct)*100}));
@@ -361,7 +624,7 @@
                 </div>
               ))}
             </div>
-            <p style={{fontSize:11,color:C.inkSoft,textAlign:"center"}}>{metric==="success"?"Success = reached Screening, Interview, or Offer":"Offer = received a job offer"}</p>
+            <p style={{fontSize:11,color:C.inkSoft,textAlign:"center"}}>{metric==="success"?"Success = reached Interview or Offer":"Offer = received a job offer"}</p>
           </div>
         </div>
       );
@@ -369,6 +632,7 @@
 
     // ── Overlays ──────────────────────────────────────────────────────────────
     function TimelineOverlay({ job, onClose, onSave }) {
+      const { statuses, statusMeta, stageColors } = React.useContext(StatusContext);
       if (!job) return null;
       const init = job.history && job.history.length ? job.history : [{status:job.status,timestamp:null}];
       const [localHistory, setLocalHistory] = React.useState(init);
@@ -411,18 +675,18 @@
               <div style={{display:"flex",flexDirection:"column",gap:0}}>
                 {localHistory.map((h,i)=>(
                   <div key={i} style={{display:"flex",gap:12,alignItems:"flex-start",paddingBottom:16,position:"relative"}}>
-                    <div style={{width:24,height:24,borderRadius:"50%",background:STAGE_COLORS[h.status]||C.border,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1,marginTop:1}}>
+                    <div style={{width:24,height:24,borderRadius:"50%",background:stageColors[h.status]||C.border,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1,marginTop:1}}>
                       <div style={{width:8,height:8,borderRadius:"50%",background:"white"}}/>
                     </div>
                     <div style={{flex:1}}>
                       {editingIdx===i ? (
                         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:4}}>
-                          {STATUSES.map(s=>(
+                          {statuses.map(s=>(
                             <button key={s} onClick={()=>setStatus(i,s)}
                               style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,cursor:"pointer",
-                                border:`1.5px solid ${s===h.status?STAGE_COLORS[s]||C.border:C.border}`,
-                                background:s===h.status?(STATUS_META[s]?.bg||C.bg):"white",
-                                color:s===h.status?(STATUS_META[s]?.text||C.ink):C.inkMid}}>
+                                border:`1.5px solid ${s===h.status?stageColors[s]||C.border:C.border}`,
+                                background:s===h.status?(statusMeta[s]?.bg||C.bg):"white",
+                                color:s===h.status?(statusMeta[s]?.text||C.ink):C.inkMid}}>
                               {s}
                             </button>
                           ))}
@@ -526,6 +790,7 @@
 
     // ── Status Badge ──────────────────────────────────────────────────────────
     function StatusBadge({ status, onSelect }) {
+      const { statuses, statusMeta } = React.useContext(StatusContext);
       const [dropPos,setDropPos] = useState(null);
       const btnRef=useRef(), menuRef=useRef();
       useEffect(() => {
@@ -540,7 +805,7 @@
         const r = btnRef.current.getBoundingClientRect();
         setDropPos({top:r.bottom+4,left:r.left});
       };
-      const m = STATUS_META[status] || STATUS_META.Ghosted;
+      const m = statusMeta[status] || statusMeta[statuses[statuses.length-1]] || { bg:C.bg, text:C.inkMid, dot:C.inkSoft };
       return (
         <>
           <button ref={btnRef} onClick={toggle} style={{background:m.bg,color:m.text,border:"none",borderRadius:20,padding:"4px 11px 4px 9px",fontSize:11,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
@@ -548,11 +813,11 @@
           </button>
           {dropPos && (
             <div ref={menuRef} className="card" style={{position:"fixed",top:dropPos.top,left:dropPos.left,zIndex:9999,padding:"6px 0",minWidth:156,background:"white"}}>
-              {STATUSES.map(s => { const sm=STATUS_META[s]; return (
+              {statuses.map(s => { const sm=statusMeta[s]||{}; return (
                 <button key={s} onClick={e=>{e.stopPropagation();onSelect(s);setDropPos(null);}}
                   style={{width:"100%",textAlign:"left",padding:"8px 14px",fontSize:12,fontWeight:s===status?700:500,color:C.inkMid,background:"transparent",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
                   onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <span style={{width:8,height:8,borderRadius:"50%",background:sm.dot,flexShrink:0}}/>{s}
+                  <span style={{width:8,height:8,borderRadius:"50%",background:sm.dot||C.inkSoft,flexShrink:0}}/>{s}
                 </button>
               ); })}
             </div>
@@ -664,12 +929,12 @@
       }, [jobs]);
 
       if (!jobs.filter(j => j.date).length) return null;
-      return <div style={{height:90, marginTop:16}}><canvas ref={canvasRef} /></div>;
+      return <div style={{height:90, marginTop:16, width:"100%", minWidth:0, overflow:"hidden", position:"relative"}}><canvas ref={canvasRef} /></div>;
     }
 
     // ── Stat Card ─────────────────────────────────────────────────────────────
     function StatCard({ label, value, sub, idx, trend }) {
-      const sc = STAT_CARDS[idx%4];
+      const sc = getStatCards()[idx%4];
       return (
         <div style={{background:sc.bg,borderRadius:16,padding:"20px 22px",border:`1.5px solid ${sc.border}`}}>
           <div style={{fontSize:11,fontWeight:600,color:sc.accent,opacity:0.7,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:8}}>{label}</div>
@@ -684,6 +949,481 @@
         </div>
       );
     }
+
+    // ── Settings Page ─────────────────────────────────────────────────────────
+    function AppearanceSection({ themeName, themeMode, changeTheme, statusConfig, saveStatusConfig }) {
+      const [openColorFor, setOpenColorFor] = React.useState(null);
+      const sourceStatus = [...statusConfig].sort((a,b) => a.stage_order - b.stage_order)[0];
+      const nonSource = statusConfig.filter(s => s.name !== sourceStatus?.name);
+      const PRESETS = [
+        { name:"default", label:"Default", colors:["#6B6BD4","#4ECDC4","#F0B8D8","#C8B8F8","#FF8C42"] },
+        { name:"ocean",   label:"Ocean",   colors:["#0EA5E9","#06B6D4","#818CF8","#A5B4FC","#F97316"] },
+        { name:"forest",  label:"Forest",  colors:["#16A34A","#65A30D","#34D399","#6EE7B7","#F59E0B"] },
+        { name:"sunset",  label:"Sunset",  colors:["#F97316","#EC4899","#EF4444","#F0B8D8","#FCA5A5"] },
+      ];
+      return (
+        <div>
+          {/* Mode toggle */}
+          <div style={{marginBottom:28}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Mode</div>
+            <div style={{display:"inline-flex",background:C.bg,border:`1.5px solid ${C.border}`,borderRadius:12,padding:3,gap:2}}>
+              {[["light","☀ Light"],["dark","◐ Dark"],["system","⊙ System"]].map(([val,lbl]) => (
+                <button key={val} onClick={()=>changeTheme(themeName,val)}
+                  style={{padding:"7px 18px",borderRadius:9,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
+                    background:themeMode===val?C.white:"transparent",color:themeMode===val?C.ink:C.inkSoft,
+                    boxShadow:themeMode===val?"0 1px 4px rgba(15,15,26,0.10)":"none",transition:"all 0.15s",fontFamily:"inherit"}}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Preset themes */}
+          <div style={{marginBottom:28}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Colour Theme</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,maxWidth:400}}>
+              {PRESETS.map(p => (
+                <button key={p.name} onClick={()=>changeTheme(p.name,themeMode)}
+                  style={{background:C.white,border:`2px solid ${themeName===p.name?C.indigo:C.border}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",position:"relative",transition:"border-color 0.15s"}}>
+                  <div style={{display:"flex",gap:5,marginBottom:8}}>
+                    {p.colors.map((col,i) => <div key={i} style={{width:16,height:16,borderRadius:"50%",background:col}}/>)}
+                  </div>
+                  <div style={{fontSize:12,fontWeight:600,color:C.ink}}>{p.label}</div>
+                  {themeName===p.name && (
+                    <div style={{position:"absolute",top:8,right:8,width:18,height:18,borderRadius:"50%",background:C.indigo,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"white",fontWeight:800}}>✓</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Tag colours */}
+          {nonSource.length > 0 && (
+            <div>
+              <div style={{fontSize:12,fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Tag Colours</div>
+              <div className="card" style={{padding:"4px 0"}}>
+                {nonSource.map((s,i) => (
+                  <div key={s.name} style={{padding:"10px 16px",borderBottom:i<nonSource.length-1?`1px solid ${C.border}`:"none",display:"flex",alignItems:"center",gap:10,position:"relative"}}>
+                    <div style={{width:12,height:12,borderRadius:"50%",background:s.dot,flexShrink:0}}/>
+                    <span style={{flex:1,fontSize:13,fontWeight:600,color:C.ink}}>{s.name}</span>
+                    {s.protected && <span style={{fontSize:10,color:C.inkSoft,fontStyle:"italic"}}>system</span>}
+                    <button onClick={()=>setOpenColorFor(openColorFor===s.name?null:s.name)}
+                      style={{padding:"4px 10px",borderRadius:8,border:`1.5px solid ${openColorFor===s.name?C.indigo:C.border}`,background:openColorFor===s.name?C.indigoLight:C.white,cursor:"pointer",fontSize:11,fontWeight:600,color:openColorFor===s.name?C.indigo:C.inkMid,fontFamily:"inherit",transition:"all 0.15s"}}>
+                      Color
+                    </button>
+                    {openColorFor===s.name && (
+                      <div style={{position:"absolute",right:16,top:"100%",background:C.white,border:`1.5px solid ${C.border}`,borderRadius:10,padding:10,display:"flex",gap:6,flexWrap:"wrap",zIndex:100,boxShadow:"0 4px 16px rgba(15,15,26,0.12)",width:176}}>
+                        {COLOR_PRESETS.map(p=>(
+                          <button key={p.label} onClick={()=>{
+                            saveStatusConfig(statusConfig.map(x=>x.name===s.name?{...x,dot:p.dot,bg:p.bg,text:p.text}:x));
+                            setOpenColorFor(null);
+                          }} title={p.label}
+                            style={{width:24,height:24,borderRadius:"50%",background:p.dot,border:`2.5px solid ${p.dot===s.dot?C.ink:"transparent"}`,cursor:"pointer",padding:0}}/>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function PipelineSection({ statusConfig, saveStatusConfig }) {
+      const [local, setLocal] = React.useState(statusConfig);
+      const [adding, setAdding] = React.useState(false);
+      const [addName, setAddName] = React.useState("");
+      const [addPreset, setAddPreset] = React.useState(COLOR_PRESETS[2]);
+      const [editingColor, setEditingColor] = React.useState(null);
+      const [limitError, setLimitError] = React.useState("");
+      const [dragIdx, setDragIdx] = React.useState(null);
+      const [dragOverIdx, setDragOverIdx] = React.useState(null);
+      const localRef = React.useRef(local);
+      localRef.current = local;
+
+      React.useEffect(() => { setLocal(statusConfig); }, [statusConfig]);
+
+      const sourceStatus = [...local].sort((a,b) => a.stage_order - b.stage_order)[0];
+      const nonApplied = local.filter(s => s.name !== sourceStatus?.name);
+
+      const commit = updated => { setLocal(updated); saveStatusConfig(updated); };
+
+      const updateName = (i, name) => {
+        const target = nonApplied[i];
+        setLocal(local.map(s => s === target ? {...s, name} : s));
+      };
+      const blurName = () => commit(localRef.current);
+
+      const toggleType = i => {
+        const target = nonApplied[i];
+        commit(local.map(s => s === target ? {...s, type:s.type==="progress"?"terminal":"progress"} : s));
+      };
+
+      const updateColor = (i, preset) => {
+        const target = nonApplied[i];
+        setEditingColor(null);
+        commit(local.map(s => s === target ? {...s, dot:preset.dot, bg:preset.bg, text:preset.text} : s));
+      };
+
+      const remove = i => {
+        if (local.length <= 3) { setLimitError("Minimum of 3 stages required."); return; }
+        setLimitError("");
+        commit(local.filter(s => s !== nonApplied[i]));
+      };
+
+      const addStage = () => {
+        if (!addName.trim()) return;
+        if (local.length >= 8) { setLimitError("Maximum of 8 stages reached."); setAdding(false); return; }
+        setLimitError("");
+        const maxOrder = local.reduce((m,s) => Math.max(m, s.stage_order ?? 0), 0);
+        commit([...local, {name:addName.trim(), dot:addPreset.dot, bg:addPreset.bg, text:addPreset.text, stage_order:maxOrder+1, type:"progress"}]);
+        setAddName(""); setAdding(false);
+      };
+
+      const handleDragStart = (e,i) => { setDragIdx(i); e.dataTransfer.effectAllowed="move"; };
+      const handleDragOver  = (e,i) => { e.preventDefault(); e.dataTransfer.dropEffect="move"; setDragOverIdx(i); };
+      const handleDrop = (e, dropIdx) => {
+        e.preventDefault();
+        if (dragIdx===null || dragIdx===dropIdx) { setDragIdx(null); setDragOverIdx(null); return; }
+        const next = [...nonApplied];
+        const [moved] = next.splice(dragIdx, 1);
+        next.splice(dropIdx, 0, moved);
+        const source = local.find(s => s.name === sourceStatus?.name);
+        const pinned = next.filter(s => s.protected).sort((a,b) => a.stage_order - b.stage_order);
+        const draggable = next.filter(s => !s.protected);
+        let order = 2;
+        commit([...(source?[source]:[]), ...pinned, ...draggable.map(s=>({...s,stage_order:order++}))]);
+        setDragIdx(null); setDragOverIdx(null);
+      };
+      const handleDragEnd = () => { setDragIdx(null); setDragOverIdx(null); };
+
+      const canAdd = local.length < 8;
+
+      return (
+        <div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{fontSize:12,color:C.inkSoft}}>{local.length} of 8 stages used</div>
+          </div>
+          <div style={{background:C.indigoLight,borderRadius:10,padding:"9px 14px",marginBottom:14,fontSize:12,color:C.inkMid,lineHeight:1.5}}>
+            <strong style={{color:C.ink}}>Applied</strong> is the source stage — all applications start here. Its settings are fixed.
+          </div>
+          {limitError && (
+            <div style={{background:"#FFF5F5",border:"1.5px solid #DC2626",borderRadius:8,padding:"8px 12px",marginBottom:10,fontSize:12,color:"#7F1D1D",lineHeight:1.5}}>{limitError}</div>
+          )}
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
+            {nonApplied.map((s,i) => (
+              <div key={s.name+i}
+                draggable={!s.protected}
+                onDragStart={!s.protected ? e=>handleDragStart(e,i) : undefined}
+                onDragOver={e=>handleDragOver(e,i)}
+                onDrop={e=>handleDrop(e,i)}
+                onDragEnd={handleDragEnd}
+                style={{background:dragOverIdx===i&&dragIdx!==i?C.indigoLight:C.white,borderRadius:10,padding:"10px 12px",
+                  border:`1.5px solid ${dragOverIdx===i&&dragIdx!==i?C.indigo:C.border}`,opacity:dragIdx===i?0.4:1,
+                  transition:"border-color 0.12s,background 0.12s",position:"relative"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  {s.protected
+                    ? <span style={{fontSize:12,color:C.inkSoft,width:16,textAlign:"center",userSelect:"none",flexShrink:0}}>🔒</span>
+                    : <span draggable={false} style={{cursor:"grab",fontSize:15,color:C.inkSoft,width:16,textAlign:"center",userSelect:"none",lineHeight:1,flexShrink:0}} title="Drag to reorder">⠿</span>
+                  }
+                  <button onClick={()=>setEditingColor(editingColor===i?null:i)}
+                    style={{width:14,height:14,borderRadius:"50%",background:s.dot,border:`2px solid ${editingColor===i?C.ink:"transparent"}`,flexShrink:0,cursor:"pointer",padding:0,transition:"border-color 0.12s"}}/>
+                  {s.protected
+                    ? <span style={{flex:1,fontSize:13,fontWeight:600,color:C.inkMid}}>{s.name}</span>
+                    : <input value={s.name} onChange={e=>updateName(i,e.target.value)} onBlur={blurName}
+                        style={{flex:1,border:"none",background:"transparent",fontSize:13,fontWeight:600,color:C.ink,outline:"none",fontFamily:"inherit",minWidth:0}}/>
+                  }
+                  <button onClick={s.protected?undefined:()=>toggleType(i)} disabled={s.protected}
+                    style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20,border:"none",cursor:s.protected?"default":"pointer",fontFamily:"inherit",
+                      color:s.type==="terminal"?"#7F1D1D":"#145E5A",background:s.type==="terminal"?"#FFE0E0":"#D0F5F3",
+                      opacity:s.protected?0.7:1,flexShrink:0}}>
+                    {s.type==="terminal"?"Terminal":"Progress"}
+                  </button>
+                  {s.protected
+                    ? <span style={{fontSize:10,color:C.inkSoft,fontStyle:"italic",flexShrink:0}}>system</span>
+                    : <button onClick={()=>remove(i)} title="Remove stage"
+                        style={{background:"transparent",border:"none",cursor:"pointer",color:"#DC2626",fontSize:14,lineHeight:1,padding:"2px 4px",flexShrink:0}}>✕</button>
+                  }
+                </div>
+                {editingColor===i && (
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8,paddingLeft:24}}>
+                    {COLOR_PRESETS.map(p => (
+                      <button key={p.label} onClick={()=>updateColor(i,p)} title={p.label}
+                        style={{width:20,height:20,borderRadius:"50%",background:p.dot,border:`2.5px solid ${p.dot===s.dot?C.ink:"transparent"}`,cursor:"pointer",padding:0}}/>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {adding ? (
+            <div style={{background:C.bg,borderRadius:10,padding:"10px 12px",border:`1.5px solid ${C.border}`,marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                <div style={{width:12,height:12,borderRadius:"50%",background:addPreset.dot,flexShrink:0}}/>
+                <input autoFocus placeholder="Stage name…" value={addName} onChange={e=>setAddName(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&addStage()}
+                  style={{flex:1,border:"none",background:"transparent",fontSize:13,fontWeight:600,color:C.ink,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                {COLOR_PRESETS.map(p=>(
+                  <button key={p.label} onClick={()=>setAddPreset(p)} title={p.label}
+                    style={{width:20,height:20,borderRadius:"50%",background:p.dot,border:`2.5px solid ${p.dot===addPreset.dot?C.ink:"transparent"}`,cursor:"pointer",padding:0}}/>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={addStage} style={{flex:1,padding:"7px 0",borderRadius:8,background:C.indigo,color:"white",border:"none",cursor:"pointer",fontWeight:700,fontSize:12,fontFamily:"inherit"}}>Add</button>
+                <button onClick={()=>{setAdding(false);setAddName("");}} style={{flex:1,padding:"7px 0",borderRadius:8,background:C.white,color:C.inkMid,border:`1.5px solid ${C.border}`,cursor:"pointer",fontSize:12,fontFamily:"inherit"}}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={()=>{if(canAdd){setLimitError("");setAdding(true);}else setLimitError("Maximum of 8 stages reached. Delete a stage first.");}}
+              style={{width:"100%",padding:"9px 0",borderRadius:10,background:C.white,border:`1.5px dashed ${canAdd?C.border:"#DC2626"}`,cursor:canAdd?"pointer":"default",fontSize:12,fontWeight:600,color:canAdd?C.inkMid:"#DC2626",marginBottom:4,fontFamily:"inherit"}}>
+              {canAdd ? `+ Add Stage  (${local.length}/8)` : "Max 8 stages reached"}
+            </button>
+          )}
+          <p style={{fontSize:11,color:C.inkSoft,marginTop:10,lineHeight:1.5}}>
+            Drag ⠿ to reorder · Click type badge to toggle Progress / Terminal · 🔒 system stages are fixed
+          </p>
+        </div>
+      );
+    }
+
+    function DataSection({ jobs, onExportCSV, onExportExcel, onCSVFile, importPreview, setImportPreview,
+                           importMode, setImportMode, importReplaceText, setImportReplaceText,
+                           onConfirmImport, resetText, setResetText, onReset }) {
+      const previewRows = importPreview?.rows?.slice(0, 5) ?? [];
+      return (
+        <div style={{display:"flex",flexDirection:"column",gap:24}}>
+          {/* Export */}
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Export</div>
+            <div className="card" style={{padding:18}}>
+              <p style={{fontSize:13,color:C.inkMid,margin:"0 0 14px",lineHeight:1.6}}>Download all your applications as a file.</p>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button onClick={onExportCSV} className="btn-outline" style={{display:"flex",alignItems:"center",gap:6,borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:600}}>⬇ Export as CSV</button>
+                <button onClick={onExportExcel} className="btn-outline" style={{display:"flex",alignItems:"center",gap:6,borderRadius:10,padding:"9px 16px",fontSize:12,fontWeight:600}}>⬇ Export as Excel</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Import */}
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Import</div>
+            <div className="card" style={{padding:18}}>
+              <p style={{fontSize:13,color:C.inkMid,margin:"0 0 14px",lineHeight:1.6}}>
+                Import a CSV exported from Job Tracker for Dummies.<br/>
+                <span style={{fontSize:11,color:C.inkSoft}}>Required columns: title, company, status, date, cv, notes, url</span>
+              </p>
+              <label style={{display:"inline-flex",alignItems:"center",gap:6,padding:"9px 16px",borderRadius:10,border:`1.5px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:12,fontWeight:600,color:C.inkMid}}>
+                📂 Import CSV
+                <input type="file" accept=".csv" onChange={onCSVFile} style={{display:"none"}}/>
+              </label>
+
+              {importPreview?.error && (
+                <div style={{marginTop:12,background:"#FFF5F5",border:"1.5px solid #DC2626",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#7F1D1D",lineHeight:1.5}}>{importPreview.error}</div>
+              )}
+
+              {importPreview?.rows && (
+                <div style={{marginTop:14}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.ink,marginBottom:8}}>{importPreview.count} applications found — preview (first 5):</div>
+                  <div style={{overflowX:"auto",borderRadius:8,border:`1.5px solid ${C.border}`,marginBottom:14}}>
+                    <table style={{borderCollapse:"collapse",width:"100%",fontSize:11}}>
+                      <thead>
+                        <tr>{["title","company","status","date"].map(h=>(
+                          <th key={h} style={{padding:"7px 10px",textAlign:"left",fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.05em",background:C.bg,borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap"}}>{h}</th>
+                        ))}</tr>
+                      </thead>
+                      <tbody>
+                        {previewRows.map((r,i)=>(
+                          <tr key={i} style={{borderBottom:i<previewRows.length-1?`1px solid ${C.border}`:"none"}}>
+                            {["title","company","status","date"].map(h=>(
+                              <td key={h} style={{padding:"7px 10px",color:C.inkMid,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r[h]||"—"}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                    <button onClick={()=>setImportMode("merge")}
+                      style={{padding:"8px 16px",borderRadius:10,border:`1.5px solid ${importMode==="merge"?C.indigo:C.border}`,background:importMode==="merge"?C.indigoLight:C.white,color:importMode==="merge"?C.indigo:C.inkMid,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                      Merge with existing
+                    </button>
+                    <button onClick={()=>setImportMode("replace")}
+                      style={{padding:"8px 16px",borderRadius:10,border:`1.5px solid ${importMode==="replace"?"#DC2626":C.border}`,background:importMode==="replace"?"#FFF5F5":C.white,color:importMode==="replace"?"#DC2626":C.inkMid,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                      Replace all
+                    </button>
+                    <button onClick={()=>{setImportPreview(null);setImportMode(null);setImportReplaceText("");}}
+                      style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                  </div>
+                  {importMode==="replace" && (
+                    <div style={{marginTop:12,background:"#FFF5F5",borderRadius:10,padding:"12px 14px",border:"1.5px solid #DC2626"}}>
+                      <p style={{fontSize:12,color:"#7F1D1D",margin:"0 0 10px",lineHeight:1.5}}>This will permanently delete all {jobs.length} existing applications and replace them. Type <strong>REPLACE</strong> to confirm.</p>
+                      <input value={importReplaceText} onChange={e=>setImportReplaceText(e.target.value)} placeholder="Type REPLACE"
+                        style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #DC2626",fontSize:12,fontFamily:"inherit",outline:"none",color:"#7F1D1D",background:"white"}}/>
+                    </div>
+                  )}
+                  {importMode && (
+                    <button onClick={onConfirmImport}
+                      disabled={importMode==="replace" && importReplaceText!=="REPLACE"}
+                      className="btn-cta" style={{marginTop:12,borderRadius:10,padding:"9px 20px",fontSize:13,width:"100%",opacity:(importMode==="replace"&&importReplaceText!=="REPLACE")?0.4:1}}>
+                      {importMode==="merge"?"Merge Applications":"Replace All Applications"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Danger Zone — Reset */}
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:"#DC2626",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Danger Zone</div>
+            <div style={{border:"1.5px solid #DC2626",borderRadius:16,padding:20,background:"white"}}>
+              <div style={{fontWeight:700,color:C.ink,fontSize:14,marginBottom:4}}>Reset all data</div>
+              <p style={{fontSize:13,color:C.inkSoft,margin:"0 0 14px",lineHeight:1.6}}>
+                You have <strong style={{color:C.ink}}>{jobs.length} application{jobs.length!==1?"s":""}</strong> saved.
+                This will permanently delete all of them and cannot be undone.
+              </p>
+              <input value={resetText} onChange={e=>setResetText(e.target.value)} placeholder='Type DELETE to confirm'
+                style={{width:"100%",padding:"9px 14px",borderRadius:10,border:`1.5px solid ${resetText==="DELETE"?"#DC2626":C.border}`,fontSize:13,fontFamily:"inherit",outline:"none",color:C.ink,background:C.bg,marginBottom:10}}/>
+              <button onClick={onReset} disabled={resetText!=="DELETE"}
+                style={{padding:"9px 20px",borderRadius:10,background:resetText==="DELETE"?"#DC2626":C.border,color:"white",border:"none",cursor:resetText==="DELETE"?"pointer":"default",fontSize:13,fontWeight:700,fontFamily:"inherit",opacity:resetText==="DELETE"?1:0.6}}>
+                Reset All Data
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function SupportSection({ supportForm, setSupportForm, supportSubmitted, setSupportSubmitted, supportDirty, setSupportDirty }) {
+      const [errors, setErrors] = React.useState({});
+
+      const update = (key, val) => {
+        setSupportForm(f => ({...f, [key]: val}));
+        setSupportDirty(true);
+        if (errors[key]) setErrors(e => ({...e, [key]: null}));
+      };
+
+      const validate = () => {
+        const e = {};
+        if (!supportForm.subject.trim()) e.subject = "Subject is required.";
+        if (supportForm.message.trim().length < 20) e.message = "Message must be at least 20 characters.";
+        if (supportForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supportForm.email)) e.email = "Please enter a valid email address.";
+        return e;
+      };
+
+      const submit = () => {
+        const e = validate();
+        if (Object.keys(e).length) { setErrors(e); return; }
+        console.log("Support submission:", supportForm);
+        setSupportSubmitted(true);
+        setSupportDirty(false);
+      };
+
+      if (supportSubmitted) return (
+        <div className="card" style={{padding:32,textAlign:"center"}}>
+          <div style={{fontSize:40,marginBottom:12}}>✅</div>
+          <div style={{fontWeight:800,fontSize:17,color:C.ink,marginBottom:8}}>Thanks for reaching out!</div>
+          <p style={{fontSize:13,color:C.inkSoft,lineHeight:1.6,margin:"0 0 20px"}}>We'll get back to you within 2 business days.</p>
+          <button onClick={()=>{setSupportSubmitted(false);setSupportForm({category:"Bug Report",subject:"",message:"",email:""}); setSupportDirty(false);}}
+            className="btn-outline" style={{borderRadius:10,padding:"9px 20px",fontSize:13}}>Send another message</button>
+        </div>
+      );
+
+      const field = (label, key, type="text", hint=null) => (
+        <div>
+          <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</label>
+          <input type={type} value={supportForm[key]} onChange={e=>update(key,e.target.value)} className="app-input"
+            style={{borderColor:errors[key]?"#DC2626":undefined}}/>
+          {hint && !errors[key] && <p style={{fontSize:11,color:C.inkSoft,margin:"4px 0 0"}}>{hint}</p>}
+          {errors[key] && <p style={{fontSize:11,color:"#DC2626",margin:"4px 0 0"}}>{errors[key]}</p>}
+        </div>
+      );
+
+      return (
+        <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:480}}>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>Category</label>
+            <select value={supportForm.category} onChange={e=>update("category",e.target.value)} className="app-input">
+              {["Bug Report","Feature Request","General Enquiry"].map(c=><option key={c}>{c}</option>)}
+            </select>
+          </div>
+          {field("Subject","subject")}
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>Message</label>
+            <textarea value={supportForm.message} onChange={e=>update("message",e.target.value)} className="app-input"
+              placeholder="Describe your issue or idea…" style={{height:110,resize:"none",display:"block",lineHeight:1.6,borderColor:errors.message?"#DC2626":undefined}}/>
+            {!errors.message && <p style={{fontSize:11,color:C.inkSoft,margin:"4px 0 0"}}>{Math.max(0,20-supportForm.message.trim().length)} characters still needed</p>}
+            {errors.message && <p style={{fontSize:11,color:"#DC2626",margin:"4px 0 0"}}>{errors.message}</p>}
+          </div>
+          {field("Email (optional)","email","email")}
+          <button onClick={submit} className="btn-cta" style={{borderRadius:10,padding:"10px 0",width:"100%",fontSize:13,marginTop:4}}>Send Message</button>
+        </div>
+      );
+    }
+
+    function SettingsPage({ statusConfig, saveStatusConfig, themeName, themeMode, changeTheme, isMobile, settingsSection, setSettingsSection,
+                            jobs, onExportCSV, onExportExcel, onCSVFile, importPreview, setImportPreview,
+                            importMode, setImportMode, importReplaceText, setImportReplaceText,
+                            onConfirmImport, resetText, setResetText, onReset,
+                            supportForm, setSupportForm, supportSubmitted, setSupportSubmitted, supportDirty, setSupportDirty }) {
+      const SECTIONS = [
+        { id:"appearance", label:"Appearance",      icon:"🎨" },
+        { id:"pipeline",   label:"Pipeline Stages", icon:"⚡" },
+        { id:"data",       label:"Data",            icon:"📦" },
+        { id:"support",    label:"Support",         icon:"💬" },
+      ];
+      return (
+        <div>
+          <div style={{marginBottom:24}}>
+            <div style={{fontSize:isMobile?22:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>Settings</div>
+            <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>Customise your tracker</div>
+          </div>
+          <div style={{display:"flex",gap:0,alignItems:"flex-start",flexDirection:isMobile?"column":"row"}}>
+            {/* Sidebar / horizontal tabs on mobile */}
+            <div style={{width:isMobile?"100%":200,flexShrink:0,display:"flex",flexDirection:isMobile?"row":"column",
+              gap:2,overflowX:isMobile?"auto":"visible",scrollbarWidth:"none",
+              borderRight:isMobile?"none":`1.5px solid ${C.border}`,
+              paddingRight:isMobile?0:16,paddingBottom:isMobile?16:0,marginBottom:isMobile?8:0}}>
+              {SECTIONS.map(s => (
+                <button key={s.id} onClick={()=>setSettingsSection(s.id)}
+                  style={{display:"flex",alignItems:"center",gap:8,padding:isMobile?"9px 14px":"10px 12px",
+                    borderRadius:10,border:"none",cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap",
+                    fontSize:13,fontWeight:settingsSection===s.id?700:500,textAlign:"left",flexShrink:0,
+                    background:settingsSection===s.id?C.indigoLight:"transparent",
+                    color:settingsSection===s.id?C.ink:C.inkSoft,transition:"background 0.12s,color 0.12s"}}>
+                  <span style={{fontSize:14}}>{s.icon}</span>{s.label}
+                </button>
+              ))}
+            </div>
+            {/* Content area */}
+            <div style={{flex:1,paddingLeft:isMobile?0:28,minWidth:0,paddingTop:isMobile?8:0}}>
+              {settingsSection==="appearance" && (
+                <AppearanceSection themeName={themeName} themeMode={themeMode} changeTheme={changeTheme}
+                  statusConfig={statusConfig} saveStatusConfig={saveStatusConfig}/>
+              )}
+              {settingsSection==="pipeline" && (
+                <PipelineSection statusConfig={statusConfig} saveStatusConfig={saveStatusConfig}/>
+              )}
+              {settingsSection==="data" && (
+                <DataSection jobs={jobs} onExportCSV={onExportCSV} onExportExcel={onExportExcel} onCSVFile={onCSVFile}
+                  importPreview={importPreview} setImportPreview={setImportPreview}
+                  importMode={importMode} setImportMode={setImportMode}
+                  importReplaceText={importReplaceText} setImportReplaceText={setImportReplaceText}
+                  onConfirmImport={onConfirmImport} resetText={resetText} setResetText={setResetText} onReset={onReset}/>
+              )}
+              {settingsSection==="support" && (
+                <SupportSection supportForm={supportForm} setSupportForm={setSupportForm}
+                  supportSubmitted={supportSubmitted} setSupportSubmitted={setSupportSubmitted}
+                  supportDirty={supportDirty} setSupportDirty={setSupportDirty}/>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
 
     // ── Main App ──────────────────────────────────────────────────────────────
     function App() {
@@ -703,20 +1443,101 @@
       const [showFilters,setShowFilters] = useState(false);
       const [selectedStatuses,setSelectedStatuses] = useState([]);
       const [sortOrder,setSortOrder] = useState("none");
-      const [showResetConfirm,setShowResetConfirm] = useState(false);
       const [cardFilter,setCardFilter] = useState("All");
       const [successFilter,setSuccessFilter] = useState("All time");
       const [activityView,setActivityView] = useState("activity");
+      const [statusConfig,setStatusConfig] = useState(DEFAULT_STATUS_CONFIG);
+      const [orphanAlert,setOrphanAlert] = useState(null);
+      const [themeName,setThemeName] = useState("default");
+      const [themeMode,setThemeMode] = useState("light");
+      const [themeVersion,setThemeVersion] = useState(0);
+      const [settingsSection,setSettingsSection] = useState("appearance");
+      const [importPreview,setImportPreview] = useState(null);
+      const [importMode,setImportMode] = useState(null);
+      const [importReplaceText,setImportReplaceText] = useState("");
+      const [resetText,setResetText] = useState("");
+      const [supportForm,setSupportForm] = useState({category:"Bug Report",subject:"",message:"",email:""});
+      const [supportSubmitted,setSupportSubmitted] = useState(false);
+      const [supportDirty,setSupportDirty] = useState(false);
+
+      const styles = useMemo(makeStyles, [themeVersion]);
+
+      const windowWidth = useWindowWidth();
+      const isMobile = windowWidth < 768;
+      const isTablet = windowWidth < 1024;
 
       useEffect(() => {
         try {
+          // ── Job status migration ───────────────────────────────────────────
+          const STATUS_RENAMES = { "Interviewing":"Interview", "Screening Call":"Interview", "Ghosted":"No Answer" };
           const r = localStorage.getItem("jobs");
-          if (r) { setJobs(JSON.parse(r)); }
-          else { setJobs(SEED_JOBS); localStorage.setItem("jobs", JSON.stringify(SEED_JOBS)); }
+          if (r) {
+            let loadedJobs = JSON.parse(r);
+            let jobsDirty = false;
+            loadedJobs = loadedJobs.map(j => {
+              const ns = STATUS_RENAMES[j.status] || j.status;
+              const nh = (j.history||[]).map(h => ({...h, status: STATUS_RENAMES[h.status]||h.status}));
+              if (ns !== j.status || JSON.stringify(nh) !== JSON.stringify(j.history||[])) jobsDirty = true;
+              return {...j, status:ns, history:nh};
+            });
+            setJobs(loadedJobs);
+            if (jobsDirty) localStorage.setItem("jobs", JSON.stringify(loadedJobs));
+          } else {
+            setJobs(SEED_JOBS);
+            localStorage.setItem("jobs", JSON.stringify(SEED_JOBS));
+          }
+
           const c = localStorage.getItem("colWidths"); if(c) setColWidths(JSON.parse(c));
           const k = localStorage.getItem("apiKey"); if(k) setApiKey(k);
+
+          // ── Status config migration ────────────────────────────────────────
+          const sc = localStorage.getItem("statusConfig");
+          if (sc) {
+            const parsed = JSON.parse(sc);
+            let migrated = parsed.map(s => ({
+              ...s,
+              stage_order: s.stage_order ?? (DEFAULT_STATUS_CONFIG.find(d => d.name === s.name)?.stage_order ?? 1),
+              protected:   s.protected   ?? (DEFAULT_STATUS_CONFIG.find(d => d.name === s.name)?.protected   ?? false),
+              type:        s.type        ?? (DEFAULT_STATUS_CONFIG.find(d => d.name === s.name)?.type        ?? "progress"),
+            }));
+            if (!migrated.find(s => s.name === "No Answer")) {
+              const noAnswer = DEFAULT_STATUS_CONFIG.find(s => s.name === "No Answer");
+              if (noAnswer) migrated.splice(1, 0, noAnswer);
+            }
+            setStatusConfig(migrated);
+          }
+
+          // ── Theme load ────────────────────────────────────────────────────
+          const savedTheme = localStorage.getItem("appTheme") || "default";
+          const savedMode  = localStorage.getItem("appThemeMode") || "light";
+          setThemeName(savedTheme);
+          setThemeMode(savedMode);
+          // applyTheme already ran at module level with same values; only increment
+          // themeVersion if they differ from defaults (so styles recompute with dark/non-default theme).
+          if (savedTheme !== "default" || savedMode !== "light") {
+            applyTheme(savedTheme, savedMode);
+            setThemeVersion(v => v + 1);
+          }
         } catch {}
       }, []);
+
+      // Keep body background in sync whenever theme changes
+      useEffect(() => {
+        document.body.style.background = C.bg;
+        document.documentElement.style.background = C.bg;
+      }, [themeVersion]);
+
+      const saveStatusConfig = config => {
+        const newNames = new Set(config.map(s => s.name));
+        const orphans = jobs.filter(j => !newNames.has(j.status));
+        setStatusConfig(config);
+        localStorage.setItem("statusConfig", JSON.stringify(config));
+        if (orphans.length) setOrphanAlert(orphans);
+      };
+
+      const ctxStatuses   = useMemo(() => statusConfig.map(s => s.name), [statusConfig]);
+      const ctxStatusMeta = useMemo(() => Object.fromEntries(statusConfig.map(s => [s.name, { bg:s.bg, text:s.text, dot:s.dot }])), [statusConfig]);
+      const ctxStageColors= useMemo(() => Object.fromEntries(statusConfig.map(s => [s.name, s.dot])), [statusConfig]);
 
       const save = u => { setJobs(u); localStorage.setItem("jobs", JSON.stringify(u)); };
 
@@ -738,14 +1559,75 @@
         setColWidths(updated); localStorage.setItem("colWidths",JSON.stringify(updated));
       };
 
-      const resetAllData = () => { save([]); setShowResetConfirm(false); setView("dashboard"); };
+      const resetAllData = () => {
+        if (resetText !== "DELETE") return;
+        save([]); setResetText(""); setView("dashboard");
+      };
+
+      const exportCSV = () => {
+        const HEADERS = ["title","company","status","date","cv","notes","url"];
+        const esc = v => `"${String(v ?? "").replace(/"/g,'""')}"`;
+        const rows = [HEADERS, ...jobs.map(j => HEADERS.map(h => esc(j[h])))];
+        const csv = rows.map(r => r.join(",")).join("\n");
+        const a = Object.assign(document.createElement("a"), {
+          href: URL.createObjectURL(new Blob([csv], {type:"text/csv"})),
+          download: `jobtrackerfordummies_export_${new Date().toISOString().slice(0,10)}.csv`
+        });
+        a.click(); URL.revokeObjectURL(a.href);
+      };
+
+      const handleCSVFile = e => {
+        const file = e.target.files[0]; if (!file) return;
+        e.target.value = "";
+        const EXPECTED = ["title","company","status","date","cv","notes","url"];
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const lines = ev.target.result.trim().split("\n");
+          const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g,"").trim());
+          if (!EXPECTED.every((h,i) => h === headers[i])) {
+            setImportPreview({ error: "This file doesn't match the expected format. Please use a CSV exported from Job Tracker for Dummies." });
+            return;
+          }
+          const rows = lines.slice(1).map(l => {
+            const vals = []; let cur = "", inQ = false;
+            for (const ch of l) {
+              if (ch === '"') { inQ = !inQ; } else if (ch === ',' && !inQ) { vals.push(cur); cur = ""; } else cur += ch;
+            }
+            vals.push(cur);
+            return Object.fromEntries(EXPECTED.map((h,i) => [h, vals[i]?.replace(/^"|"$/g,"") ?? ""]));
+          });
+          setImportPreview({ rows, count: rows.length });
+          setImportMode(null); setImportReplaceText("");
+        };
+        reader.readAsText(file);
+      };
+
+      const confirmImport = () => {
+        if (!importPreview?.rows) return;
+        const newJobs = importPreview.rows.map(r => ({...r, id: Date.now().toString() + Math.random().toString(36).slice(2)}));
+        if (importMode === "replace") {
+          save(newJobs);
+        } else {
+          save([...jobs, ...newJobs]);
+        }
+        setImportPreview(null); setImportMode(null); setImportReplaceText("");
+      };
+
+      const changeTheme = (name, mode) => {
+        applyTheme(name, mode);
+        setThemeName(name);
+        setThemeMode(mode);
+        setThemeVersion(v => v + 1);
+        localStorage.setItem("appTheme", name);
+        localStorage.setItem("appThemeMode", mode);
+      };
 
       const stats = {
         total: jobs.length,
-        interviewing: jobs.filter(j=>j.status==="Interviewing").length,
+        interviewing: jobs.filter(j=>j.status==="Interview").length,
         offers: jobs.filter(j=>j.status==="Offer").length,
-        successRate: jobs.length?Math.round((jobs.filter(j=>["Screening Call","Interviewing","Offer"].includes(j.status)).length/jobs.length)*100):0,
-        active: jobs.filter(j=>!["Rejected","Ghosted"].includes(j.status)).length,
+        successRate: jobs.length?Math.round((jobs.filter(j=>["Interview","Offer"].includes(j.status)).length/jobs.length)*100):0,
+        active: jobs.filter(j=>!["Rejected","No Answer"].includes(j.status)).length,
       };
 
       const cvStatsData = () => {
@@ -754,7 +1636,7 @@
           if (!j.cv) return;
           if (!cvs[j.cv]) cvs[j.cv]={total:0,interviews:0,offers:0};
           cvs[j.cv].total++;
-          if (["Screening Call","Interviewing","Offer"].includes(j.status)) cvs[j.cv].interviews++;
+          if (["Interview","Offer"].includes(j.status)) cvs[j.cv].interviews++;
           if (j.status==="Offer") cvs[j.cv].offers++;
         });
         return Object.entries(cvs).map(([name,d])=>({name,total:d.total,successRate:d.total?Math.round((d.interviews/d.total)*100):0,offerRate:d.total?Math.round((d.offers/d.total)*100):0}));
@@ -842,12 +1724,12 @@
       }, [jobs, successFilter]);
 
       const successStats = useMemo(() => ({
-        rate: successJobs.length ? Math.round((successJobs.filter(j=>["Screening Call","Interviewing","Offer"].includes(j.status)).length / successJobs.length) * 100) : 0,
+        rate: successJobs.length ? Math.round((successJobs.filter(j=>["Interview","Offer"].includes(j.status)).length / successJobs.length) * 100) : 0,
       }), [successJobs]);
 
       const cardFilteredJobs = useMemo(() => {
         if (cardFilter === "All") return jobs;
-        if (cardFilter === "Interview") return jobs.filter(j => j.status === "Interviewing");
+        if (cardFilter === "Interview") return jobs.filter(j => j.status === "Interview");
         if (cardFilter === "Reject") return jobs.filter(j => j.status === "Rejected");
         if (cardFilter === "Offer") return jobs.filter(j => j.status === "Offer");
         return jobs;
@@ -882,24 +1764,37 @@
       const cols = [{key:"title",label:"Position"},{key:"status",label:"Status"},{key:"cv",label:"CV Version"},{key:"company",label:"Company"},{key:"date",label:"Date"},{key:"notes",label:"Notes"}];
 
       return (
+        <StatusContext.Provider value={{statuses:ctxStatuses,statusMeta:ctxStatusMeta,stageColors:ctxStageColors,statusConfig}}>
         <div className="app-root">
           <style>{styles}</style>
 
-          {/* Reset Confirm */}
-          {showResetConfirm && (
-            <div style={{position:"fixed",inset:0,background:"rgba(15,15,26,0.35)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:4000}} onClick={()=>setShowResetConfirm(false)}>
-              <div className="card" style={{padding:28,width:280,margin:"0 16px",textAlign:"center",background:"white"}} onClick={e=>e.stopPropagation()}>
-                <div style={{fontSize:34,marginBottom:10}}>⚠️</div>
-                <div style={{fontWeight:800,color:C.ink,fontSize:16,marginBottom:6}}>Reset All Data?</div>
-                <p style={{fontSize:12,color:C.inkSoft,marginBottom:20,lineHeight:1.6}}>This will permanently delete all your job applications.</p>
+
+          {orphanAlert && (
+            <div style={{position:"fixed",inset:0,background:"rgba(15,15,26,0.4)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:4000}} onClick={()=>setOrphanAlert(null)}>
+              <div className="card" style={{padding:24,width:360,margin:"0 16px",background:"white",maxHeight:"80vh",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                  <span style={{fontSize:20}}>⚠️</span>
+                  <div style={{fontWeight:800,fontSize:15,color:C.ink}}>Status update needed</div>
+                </div>
+                <p style={{fontSize:13,color:C.inkSoft,marginBottom:12,lineHeight:1.6}}>
+                  <strong style={{color:C.ink}}>{orphanAlert.length} application{orphanAlert.length>1?"s":""}</strong> still use{orphanAlert.length===1?"s":""} a status that no longer exists. Please update {orphanAlert.length===1?"it":"them"}:
+                </p>
+                <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16,overflowY:"auto",flex:1}}>
+                  {orphanAlert.map(j=>(
+                    <div key={j.id} style={{background:C.bg,borderRadius:8,padding:"9px 12px",border:`1.5px solid ${C.border}`}}>
+                      <div style={{fontWeight:700,fontSize:13,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.title}</div>
+                      <div style={{fontSize:11,color:C.inkSoft,marginTop:1}}>{j.company}</div>
+                      <div style={{fontSize:11,color:"#DC2626",fontWeight:600,marginTop:3}}>Status: "{j.status}"</div>
+                    </div>
+                  ))}
+                </div>
                 <div style={{display:"flex",gap:8}}>
-                  <button className="btn-outline" style={{flex:1,padding:9}} onClick={()=>setShowResetConfirm(false)}>Cancel</button>
-                  <button onClick={resetAllData} style={{flex:1,background:"#DC2626",color:"white",border:"none",borderRadius:20,padding:9,fontSize:13,fontWeight:700,cursor:"pointer"}}>Yes, Reset</button>
+                  <button className="btn-outline" style={{flex:1,padding:9}} onClick={()=>setOrphanAlert(null)}>Dismiss</button>
+                  <button className="btn-cta" style={{flex:1,borderRadius:10,padding:9}} onClick={()=>{setOrphanAlert(null);setView("list");}}>Go to Applications</button>
                 </div>
               </div>
             </div>
           )}
-
           {ctxMenu?.job && <ContextMenu job={ctxMenu.job} position={{x:ctxMenu.x,y:ctxMenu.y}} onEdit={startEdit} onDelete={deleteJob} onViewNote={setNoteJob} onViewTimeline={setTimelineJob} onClose={()=>setCtxMenu(null)}/>}
           {noteJob && <NoteOverlay job={noteJob} onClose={()=>setNoteJob(null)}/>}
           {timelineJob && <TimelineOverlay job={timelineJob} onClose={()=>setTimelineJob(null)} onSave={(id,hist)=>{
@@ -912,40 +1807,54 @@
           }}/>}
 
           {/* Header */}
-          <div style={{background:"white",borderBottom:`1.5px solid ${C.border}`,padding:"0 28px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:100}}>
-            <div style={{display:"flex",alignItems:"center",gap:4}}>
-              <div style={{width:32,height:32,background:C.ink,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",marginRight:16}}>
-                <span style={{color:"white",fontSize:12,fontWeight:800,letterSpacing:"-0.05em"}}>JT</span>
+          <div style={{background:"white",borderBottom:`1.5px solid ${C.border}`,position:"sticky",top:0,zIndex:100}}>
+            <div style={{padding:isMobile?"0 12px":"0 28px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52}}>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <div style={{width:32,height:32,background:C.ink,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",marginRight:isMobile?0:12,flexShrink:0}}>
+                  <span style={{color:"white",fontSize:12,fontWeight:800,letterSpacing:"-0.05em"}}>JT</span>
+                </div>
+                {!isMobile && [["dashboard","Overview"],["list","Applications"],["cv","CV Stats"]].map(([v,l])=>(
+                  <button key={v} onClick={()=>setView(v)} className={`nav-tab ${view===v?"nav-tab-active":""}`}>{l}</button>
+                ))}
               </div>
-              {[["dashboard","Overview"],["list","Applications"],["cv","CV Stats"]].map(([v,l])=>(
-                <button key={v} onClick={()=>setView(v)} className={`nav-tab ${view===v?"nav-tab-active":""}`}>{l}</button>
-              ))}
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {!isMobile && <span style={{fontSize:12,color:C.inkSoft,fontWeight:500}}>{stats.total} applications</span>}
+                <button onClick={()=>setView("settings")} title="Settings"
+                  style={{background:view==="settings"?C.indigoLight:"transparent",border:`1.5px solid ${view==="settings"?C.indigo:C.border}`,borderRadius:8,width:30,height:30,cursor:"pointer",color:view==="settings"?C.indigo:C.inkSoft,fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}
+                  onMouseEnter={e=>{if(view!=="settings"){e.currentTarget.style.background=C.bg;e.currentTarget.style.color=C.ink;}}}
+                  onMouseLeave={e=>{if(view!=="settings"){e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.inkSoft;}}}>
+                  ⚙
+                </button>
+                <button className="btn-cta" style={{padding:isMobile?"8px 14px":"9px 22px",fontSize:isMobile?12:13}} onClick={()=>{setForm(EMPTY_FORM);setEditId(null);setAiText("");setView("add");}}>+ Add</button>
+              </div>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:12,color:C.inkSoft,fontWeight:500}}>{stats.total} applications</span>
-              <button onClick={()=>setShowResetConfirm(true)} style={{background:"transparent",border:"none",fontSize:11,color:C.border,cursor:"pointer",padding:"4px 8px"}}>Reset</button>
-              <button className="btn-cta" onClick={()=>{setForm(EMPTY_FORM);setEditId(null);setAiText("");setView("add");}}>+ Add Job</button>
-            </div>
+            {isMobile && (
+              <div className="scrollbar-hide" style={{display:"flex",overflowX:"auto",borderTop:`1px solid ${C.border}`,padding:"0 4px"}}>
+                {[["dashboard","Overview"],["list","Applications"],["cv","CV Stats"]].map(([v,l])=>(
+                  <button key={v} onClick={()=>setView(v)} className={`nav-tab ${view===v?"nav-tab-active":""}`} style={{whiteSpace:"nowrap",flex:"0 0 auto"}}>{l}</button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <div style={{padding:"32px 28px",maxWidth:1200,margin:"0 auto"}}>
+          <div className="resp-pad">
 
             {/* OVERVIEW */}
             {view==="dashboard" && (
               <div>
                 <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:20}}>
                   <div>
-                    <div style={{fontSize:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>Overview</div>
+                    <div style={{fontSize:isMobile?22:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>Overview</div>
                     <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>Your job search at a glance</div>
                   </div>
-                  <button className="view-link" onClick={()=>setView("list")}>View All Applications</button>
+                  {!isMobile && <button className="view-link" onClick={()=>setView("list")}>View All Applications</button>}
                 </div>
 
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+                <div className="resp-grid-2">
                   <div className="card" style={{padding:24}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                    <div style={{display:"flex",flexDirection:isTablet?"column":"row",alignItems:isTablet?"flex-start":"center",justifyContent:"space-between",gap:isTablet?6:4,marginBottom:4}}>
                       <div style={{fontSize:12,color:C.inkSoft,fontWeight:500}}>Total applications</div>
-                      <div style={{display:"flex",gap:4}}>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                         {["All","Interview","Reject","Offer"].map(t=>(
                           <button key={t} onClick={()=>setCardFilter(t)} className={`pill-selector${cardFilter===t?" pill-selector-active":""}`}>{t}</button>
                         ))}
@@ -962,9 +1871,9 @@
                   </div>
 
                   <div className="card" style={{padding:24}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                    <div style={{display:"flex",flexDirection:isTablet?"column":"row",alignItems:isTablet?"flex-start":"center",justifyContent:"space-between",gap:isTablet?6:4,marginBottom:12}}>
                       <div style={{fontSize:14,fontWeight:700,color:C.ink}}>Success Rate</div>
-                      <div style={{display:"flex",gap:4}}>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                         {["All time","Last 30d"].map(t=>(
                           <button key={t} onClick={()=>setSuccessFilter(t)} className={`pill-selector${successFilter===t?" pill-selector-active":""}`}>{t}</button>
                         ))}
@@ -978,10 +1887,10 @@
                       {successFilter==="Last 30d" ? `Based on ${successJobs.length} applications in the last 30 days` : "Applications reaching screening or further"}
                     </div>
                     <div style={{display:"flex",gap:4,alignItems:"flex-end",height:52,marginTop:4}}>
-                      {STATUSES.map((s,i) => {
+                      {ctxStatuses.map(s => {
                         const count = successJobs.filter(j=>j.status===s).length;
                         const pct = successJobs.length ? (count/successJobs.length)*100 : 0;
-                        const color = [C.indigo,C.lavender,C.teal,"#3DB870","#F97070",C.inkSoft][i];
+                        const color = ctxStageColors[s] || C.inkSoft;
                         return (
                           <div key={s} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                             <div style={{width:"100%",background:color,borderRadius:"4px 4px 0 0",height:`${Math.max(4,pct*0.48)}px`,transition:"height 0.5s",opacity:0.85}}/>
@@ -991,8 +1900,8 @@
                       })}
                     </div>
                     <div style={{display:"flex",gap:6,marginTop:6,flexWrap:"wrap"}}>
-                      {STATUSES.map((s,i)=>{
-                        const color=[C.indigo,C.lavender,C.teal,"#3DB870","#F97070",C.inkSoft][i];
+                      {ctxStatuses.map(s=>{
+                        const color = ctxStageColors[s] || C.inkSoft;
                         return <div key={s} style={{display:"flex",alignItems:"center",gap:3}}><div style={{width:7,height:7,borderRadius:2,background:color}}/><span style={{fontSize:9,color:C.inkSoft}}>{s.split(" ")[0]}</span></div>;
                       })}
                     </div>
@@ -1000,28 +1909,28 @@
                 </div>
 
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                  <div style={{fontSize:22,fontWeight:800,color:C.ink,letterSpacing:"-0.03em"}}>Application Details</div>
-                  <button className="view-link" onClick={()=>setView("list")}>View More</button>
+                  <div style={{fontSize:isMobile?17:isTablet?19:22,fontWeight:800,color:C.ink,letterSpacing:"-0.03em"}}>Application Details</div>
+                  {!isTablet && <button className="view-link" onClick={()=>setView("list")}>View More</button>}
                 </div>
 
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:20}}>
+                <div className="resp-grid-3">
                   <StatCard label="Active Pipeline" value={stats.active} trend={stats.active > 0 ? `${stats.active} open` : null} idx={0}/>
                   <StatCard label="Interviewing" value={stats.interviewing} trend={stats.interviewing > 0 ? "In progress" : null} idx={1}/>
                   <StatCard label="Offers" value={stats.offers} trend={stats.offers > 0 ? "Congratulations!" : null} idx={2}/>
                 </div>
 
-                <div style={{display:"grid",gridTemplateColumns:"3fr 4fr",gap:16}}>
-                  <div className="card" style={{padding:0,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+                <div className="resp-grid-act">
+                  <div className="card" style={{padding:0,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:isTablet?420:undefined}}>
                     <div style={{padding:"14px 18px 10px",borderBottom:`1.5px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
                       <span style={{fontSize:14,fontWeight:700,color:C.ink}}>Recent Activity</span>
                       <button onClick={()=>setActivityView(v=>v==="recent"?"activity":"recent")} className={`pill-selector${activityView==="recent"?" pill-selector-active":""}`}>Recent Application</button>
                     </div>
-                    <div style={{padding:"0 18px",flex:1,display:"flex",flexDirection:"column"}}>
+                    <div style={{padding:isTablet?"12px 18px":"0 18px",flex:1,display:"flex",flexDirection:"column"}}>
                       {activityView==="activity" ? (
                         recentActivity.length ? recentActivity.map((e,i)=>(
                           <div key={i} style={{flex:1,display:"flex",alignItems:"center",gap:12,borderBottom:i<recentActivity.length-1?`1px solid ${C.border}`:"none"}}>
-                            <div style={{width:32,height:32,borderRadius:"50%",background:STATUS_META[e.status]?.bg||C.bg,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              <div style={{width:10,height:10,borderRadius:"50%",background:STATUS_META[e.status]?.dot||C.inkSoft}}/>
+                            <div style={{width:32,height:32,borderRadius:"50%",background:ctxStatusMeta[e.status]?.bg||C.bg,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <div style={{width:10,height:10,borderRadius:"50%",background:ctxStatusMeta[e.status]?.dot||C.inkSoft}}/>
                             </div>
                             <div style={{minWidth:0}}>
                               <div style={{fontSize:13,fontWeight:700,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.title}</div>
@@ -1053,8 +1962,9 @@
                   <div className="card" style={{padding:20}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                       <div style={{fontSize:14,fontWeight:700,color:C.ink}}>Application Funnel</div>
+                      <button className="view-link" onClick={()=>setView("funnel")}>View Full</button>
                     </div>
-                    <SankeyDiagram jobs={jobs}/>
+                    <SankeyDiagram jobs={jobs} compact={true}/>
                   </div>
                 </div>
               </div>
@@ -1065,7 +1975,7 @@
               <div>
                 <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:20}}>
                   <div>
-                    <div style={{fontSize:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>Applications</div>
+                    <div style={{fontSize:isMobile?22:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>Applications</div>
                     <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>{filtered.length} of {jobs.length} shown</div>
                   </div>
                 </div>
@@ -1084,8 +1994,8 @@
                     {activeFilterCount>0 && <button onClick={resetFilters} style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer"}}>Clear</button>}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <button onClick={()=>setColWidths(DEFAULT_COL_WIDTHS)} style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer"}}>Reset columns</button>
-                    <button onClick={exportToExcel} className="filter-pill" style={{display:"flex",alignItems:"center",gap:5,fontWeight:600}}>⬇ Export Excel</button>
+                    {!isMobile && <button onClick={()=>setColWidths(DEFAULT_COL_WIDTHS)} style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer"}}>Reset columns</button>}
+                    <button onClick={exportToExcel} className="filter-pill" style={{display:"flex",alignItems:"center",gap:5,fontWeight:600}}>⬇ Export</button>
                   </div>
                 </div>
 
@@ -1095,7 +2005,7 @@
                       <p style={{fontSize:10,fontWeight:700,color:C.inkSoft,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Status</p>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         <button onClick={()=>setSelectedStatuses([])} className={`filter-pill ${selectedStatuses.length===0?"filter-pill-active":""}`}>All</button>
-                        {STATUSES.map(s=><button key={s} onClick={()=>toggleStatus(s)} className={`filter-pill ${selectedStatuses.includes(s)?"filter-pill-active":""}`}>{s}</button>)}
+                        {ctxStatuses.map(s=><button key={s} onClick={()=>toggleStatus(s)} className={`filter-pill ${selectedStatuses.includes(s)?"filter-pill-active":""}`}>{s}</button>)}
                       </div>
                     </div>
                     <div>
@@ -1111,7 +2021,31 @@
 
                 {!filtered.length
                   ? <p style={{fontSize:13,color:C.inkSoft,textAlign:"center",padding:"48px 0"}}>No applications found</p>
-                  : (
+                  : isMobile ? (
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {filtered.map(j=>(
+                        <div key={j.id} className="card" style={{padding:14}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:10}}>
+                            <div style={{minWidth:0,flex:1}}>
+                              <div style={{fontWeight:700,color:C.ink,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:2}}>{j.title}</div>
+                              <div style={{fontSize:12,color:C.inkMid}}>{j.company}{j.date?` · ${j.date}`:""}</div>
+                            </div>
+                            <button onClick={e=>{e.stopPropagation();setCtxMenu({job:j,x:e.clientX,y:e.clientY});}}
+                              style={{background:"transparent",border:`1.5px solid ${C.border}`,borderRadius:8,width:28,height:28,cursor:"pointer",color:C.inkSoft,fontSize:16,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",letterSpacing:2}}>
+                              ···
+                            </button>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+                            <StatusBadge status={j.status} onSelect={s=>updateStatus(j.id,s)}/>
+                            <div style={{display:"flex",alignItems:"center",gap:6}}>
+                              {j.cv && <span style={{fontSize:10,padding:"2px 8px",background:C.lavLight,color:"#5A2D8A",borderRadius:20,fontWeight:700,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"inline-block"}}>{j.cv}</span>}
+                              {j.notes && <button onClick={()=>setNoteJob(j)} style={{fontSize:11,color:C.indigo,background:"transparent",border:"none",cursor:"pointer",fontWeight:700,padding:0,textDecoration:"underline",textUnderlineOffset:2}}>Note</button>}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
                     <div className="card" style={{overflow:"hidden"}}>
                       <div className="scrollbar-hide" style={{maxHeight:460,overflowY:"auto",overflowX:"hidden"}}>
                         <table style={{borderCollapse:"collapse",width:"100%",tableLayout:"fixed"}}>
@@ -1141,7 +2075,7 @@
                       </div>
                     </div>
                   )}
-                <p style={{fontSize:10,color:C.border,marginTop:6,textAlign:"right"}}>Drag column edges to resize · Right-click a job title for actions</p>
+                {!isMobile && <p style={{fontSize:10,color:C.border,marginTop:6,textAlign:"right"}}>Drag column edges to resize · Right-click a job title for actions</p>}
               </div>
             )}
 
@@ -1150,7 +2084,7 @@
               <div>
                 <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",marginBottom:20}}>
                   <div>
-                    <div style={{fontSize:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>CV Stats</div>
+                    <div style={{fontSize:isMobile?22:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>CV Stats</div>
                     <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>See which CV version performs best</div>
                   </div>
                 </div>
@@ -1158,14 +2092,61 @@
               </div>
             )}
 
+            {/* FULL FUNNEL */}
+            {view==="funnel" && (
+              <div>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:12}}>
+                  <div>
+                    <button onClick={()=>setView("dashboard")} style={{background:"transparent",border:"none",fontSize:12,color:C.inkSoft,cursor:"pointer",padding:"0 0 8px 0",display:"flex",alignItems:"center",gap:4,fontFamily:"inherit",fontWeight:500}}>
+                      ← Overview
+                    </button>
+                    <div style={{fontSize:20,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>Application Funnel</div>
+                    <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>Full breakdown of your application pipeline</div>
+                  </div>
+                </div>
+
+                {/* Full Sankey */}
+                <div className="card" style={{padding:24,marginBottom:20}}>
+                  <SankeyDiagram jobs={jobs} compact={false}/>
+                </div>
+
+                {/* Per-status breakdown */}
+                <div className="card" style={{padding:24}}>
+                  <div style={{fontSize:16,fontWeight:800,color:C.ink,letterSpacing:"-0.02em",marginBottom:16}}>Pipeline Breakdown</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    {ctxStatuses.map(s => {
+                      const count = jobs.filter(j=>j.status===s).length;
+                      const pct = jobs.length ? Math.round((count/jobs.length)*100) : 0;
+                      const meta = ctxStatusMeta[s] || {bg:C.bg,text:C.inkMid,dot:C.inkSoft};
+                      return (
+                        <div key={s} style={{display:"flex",alignItems:"center",gap:12}}>
+                          <div style={{width:9,height:9,borderRadius:"50%",background:meta.dot,flexShrink:0}}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
+                              <span style={{fontSize:13,fontWeight:600,color:C.ink}}>{s}</span>
+                              <span style={{fontSize:13,fontWeight:700,color:meta.dot}}>{count} <span style={{fontSize:11,fontWeight:500,color:C.inkSoft}}>({pct}%)</span></span>
+                            </div>
+                            <div className="prog-track" style={{height:6}}>
+                              <div className="prog-fill" style={{height:"100%",background:meta.dot,width:`${pct}%`}}/>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p style={{fontSize:11,color:C.border,marginTop:16,marginBottom:0}}>Based on current status of all {jobs.length} applications</p>
+                </div>
+              </div>
+            )}
+
             {/* ADD / EDIT */}
             {view==="add" && (
               <div>
                 <div style={{marginBottom:24}}>
-                  <div style={{fontSize:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>{editId?"Edit Application":"New Application"}</div>
+                  <div style={{fontSize:isMobile?22:30,fontWeight:800,color:C.ink,letterSpacing:"-0.04em",lineHeight:1}}>{editId?"Edit Application":"New Application"}</div>
                   <div style={{fontSize:13,color:C.inkSoft,marginTop:4}}>{editId?"Update the details below":"Fill in the job details"}</div>
                 </div>
-                <div className="card" style={{padding:28,maxWidth:520}}>
+                <div className="card" style={{padding:isMobile?16:28,maxWidth:isMobile?"100%":520}}>
                   {!editId && (
                     <div style={{display:"flex",gap:6,marginBottom:20}}>
                       {[["manual","✍️ Manual"],["ai","🤖 AI Auto-fill"]].map(([m,l])=>(
@@ -1205,7 +2186,7 @@
                       <div>
                         <label style={{fontSize:10,fontWeight:700,color:C.inkSoft,display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>Status</label>
                         <select value={form.status} onChange={e=>setForm({...form,status:e.target.value})} className="app-input">
-                          {STATUSES.map(s=><option key={s}>{s}</option>)}
+                          {ctxStatuses.map(s=><option key={s}>{s}</option>)}
                         </select>
                       </div>
                       <div>
@@ -1222,8 +2203,26 @@
                 </div>
               </div>
             )}
+            {/* SETTINGS */}
+            {view==="settings" && (
+              <SettingsPage
+                statusConfig={statusConfig} saveStatusConfig={saveStatusConfig}
+                themeName={themeName} themeMode={themeMode} changeTheme={changeTheme}
+                isMobile={isMobile}
+                settingsSection={settingsSection} setSettingsSection={setSettingsSection}
+                jobs={jobs} onExportCSV={exportCSV} onExportExcel={exportToExcel} onCSVFile={handleCSVFile}
+                importPreview={importPreview} setImportPreview={setImportPreview}
+                importMode={importMode} setImportMode={setImportMode}
+                importReplaceText={importReplaceText} setImportReplaceText={setImportReplaceText}
+                onConfirmImport={confirmImport} resetText={resetText} setResetText={setResetText} onReset={resetAllData}
+                supportForm={supportForm} setSupportForm={setSupportForm}
+                supportSubmitted={supportSubmitted} setSupportSubmitted={setSupportSubmitted}
+                supportDirty={supportDirty} setSupportDirty={setSupportDirty}
+              />
+            )}
           </div>
         </div>
+        </StatusContext.Provider>
       );
     }
 
