@@ -106,7 +106,7 @@
     const DEFAULT_STATUS_CONFIG = [
       { name:"Applied",   dot:"#6B6BD4", bg:"#DEDEFF", text:"#2D2D8A", stage_order:0, protected:true, type:"progress" },
       { name:"No Answer", dot:"#7A7A9A", bg:"#EEEEF5", text:"#3D3D5C", stage_order:1, protected:true, type:"terminal" },
-      { name:"Interview", dot:"#4ECDC4", bg:"#D0F5F3", text:"#145E5A", stage_order:2,                 type:"progress" },
+      { name:"Interview", dot:"#4ECDC4", bg:"#D0F5F3", text:"#145E5A", stage_order:2, protected:true, type:"progress" },
       { name:"Offer",     dot:"#3DB870", bg:"#D0F5E0", text:"#145030", stage_order:3,                 type:"progress" },
       { name:"Rejected",  dot:"#DC2626", bg:"#FFE0E0", text:"#7F1D1D", stage_order:1,                 type:"terminal" },
     ];
@@ -309,15 +309,21 @@
       , [statusConfig, sourceStatus]);
 
       // ── Compute flows ─────────────────────────────────────────────────────
+      // "Interview" is a multiplying stage: each occurrence in a job's history
+      // becomes a separate virtual node "Interview 1", "Interview 2", etc.
       const { flows, noAnswerCount, inflow } = useMemo(() => {
         const flows = {};
         const inflow = {};
         let noAnswerCount = 0;
+        const INTERVIEW = "Interview";
         jobs.forEach(job => {
           const hist = (job.history || []).filter(h => h.status);
-          const seq = [];
-          hist.forEach(h => { if (!seq.length || seq[seq.length-1] !== h.status) seq.push(h.status); });
-          if (job.status && seq[seq.length-1] !== job.status) seq.push(job.status);
+          const rawSeq = [];
+          hist.forEach(h => { if (!rawSeq.length || rawSeq[rawSeq.length-1] !== h.status) rawSeq.push(h.status); });
+          if (job.status && rawSeq[rawSeq.length-1] !== job.status) rawSeq.push(job.status);
+          // Expand "Interview" → "Interview 1", "Interview 2", etc.
+          let iCount = 0;
+          const seq = rawSeq.map(s => s === INTERVIEW ? `Interview ${++iCount}` : s);
           const nonSource = seq.filter(s => s !== sourceStatus.name);
           if (nonSource.length === 0) {
             if (noAnswerStatus) {
@@ -328,16 +334,20 @@
           } else {
             for (let i = 0; i < seq.length - 1; i++) {
               if (seq[i] !== seq[i+1]) {
-                const key = `${seq[i]}|||${seq[i+1]}`;
-                flows[key] = (flows[key] || 0) + 1;
-                inflow[seq[i+1]] = (inflow[seq[i+1]] || 0) + 1;
+                // Skip edges that originate from a terminal node (they're backward loops)
+                const fromType = statusMap[seq[i]]?.type ?? "progress";
+                if (fromType !== "terminal") {
+                  const key = `${seq[i]}|||${seq[i+1]}`;
+                  flows[key] = (flows[key] || 0) + 1;
+                  inflow[seq[i+1]] = (inflow[seq[i+1]] || 0) + 1;
+                }
               }
             }
           }
         });
         if (noAnswerCount > 0) inflow['__no_answer__'] = noAnswerCount;
         return { flows, noAnswerCount, inflow };
-      }, [jobs, sourceStatus, noAnswerStatus]);
+      }, [jobs, sourceStatus, noAnswerStatus, statusMap]);
 
       if (!jobs.length) return (
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:80,color:C.inkSoft,fontSize:13}}>
@@ -358,10 +368,51 @@
       const usedNames    = new Set(Object.keys(inflow).filter(k => k !== '__no_answer__'));
       const visibleStats = nonSource.filter(s => usedNames.has(s.name));
 
-      // progress nodes: diagonal staircase (left → right, stepping down)
-      const progressNodes = visibleStats
-        .filter(s => (s.type ?? "progress") === "progress")
-        .sort((a, b) => a.stage_order - b.stage_order || a.name.localeCompare(b.name));
+      // Virtual "Interview N" nodes — position derived from actual flow predecessors
+      // so Interview 2 lands AFTER whatever stage fed into it (e.g. Design Trial)
+      const interviewBase      = statusConfig.find(s => s.name === "Interview");
+      const interviewBaseOrder = interviewBase?.stage_order ?? 2;
+
+      const interviewKeys = Object.keys(inflow)
+        .filter(k => /^Interview \d+$/.test(k))
+        .sort((a, b) => parseInt(a.split(" ")[1]) - parseInt(b.split(" ")[1]));
+
+      // For each "Interview N", find the highest stage_order among its direct predecessors
+      // in the flows map, then place it just after that.  Process in order so
+      // "Interview 2" can reference "Interview 1"'s already-computed position.
+      const virtualOrderMap = {};
+      interviewKeys.forEach(name => {
+        if (name === "Interview 1") { virtualOrderMap[name] = interviewBaseOrder; return; }
+        const preds = Object.keys(flows)
+          .filter(key => key.endsWith(`|||${name}`))
+          .map(key => key.split("|||")[0]);
+        let maxPredOrder = interviewBaseOrder;
+        preds.forEach(pred => {
+          const order = (statusConfig.find(s => s.name === pred)?.stage_order)
+                     ?? virtualOrderMap[pred]
+                     ?? interviewBaseOrder;
+          if (order > maxPredOrder) maxPredOrder = order;
+        });
+        virtualOrderMap[name] = maxPredOrder + 0.1;
+      });
+
+      const virtualInterviewNodes = interviewKeys.map(name => ({
+        name,
+        dot:         interviewBase?.dot  ?? C.teal,
+        bg:          interviewBase?.bg   ?? C.tealLight,
+        text:        interviewBase?.text ?? "#145E5A",
+        stage_order: virtualOrderMap[name] ?? interviewBaseOrder,
+        type:        "progress",
+      }));
+
+      // Extended status map — adds virtual interview nodes for colour lookups
+      const extStatusMap = {...statusMap, ...Object.fromEntries(virtualInterviewNodes.map(n => [n.name, n]))};
+
+      // progress nodes: replace "Interview" with virtual "Interview N" nodes in staircase
+      const progressNodes = [
+        ...visibleStats.filter(s => (s.type ?? "progress") === "progress" && s.name !== "Interview"),
+        ...virtualInterviewNodes,
+      ].sort((a, b) => a.stage_order - b.stage_order || a.name.localeCompare(b.name));
 
       // terminal nodes except the protected No Answer (handled separately)
       const otherTerminals = visibleStats
@@ -499,7 +550,7 @@
         const dy1 = (nodeYMap[to] ?? srcY) + (inUsed[to] || 0);
         inUsed[to] = (inUsed[to] || 0) + dh;
 
-        const color = to === '__no_answer__' ? (noAnswerStatus?.dot || C.inkSoft) : (statusMap[to]?.dot || C.inkSoft);
+        const color = to === '__no_answer__' ? (noAnswerStatus?.dot || C.inkSoft) : (extStatusMap[to]?.dot || C.inkSoft);
         const span = x2 - x1, cx1 = x1 + span * 0.55, cx2 = x1 + span * 0.45;
 
         return (
@@ -744,6 +795,48 @@
       );
     }
 
+    // ── Orphan Alert Modal ─────────────────────────────────────────────────────
+    function OrphanAlertModal({ orphans, statusConfig, onConfirm, onDismiss }) {
+      const defaultStatus = statusConfig[0]?.name ?? "";
+      const [selections, setSelections] = React.useState(
+        () => Object.fromEntries(orphans.map(j => [j.id, defaultStatus]))
+      );
+      const validStatuses = statusConfig.map(s => s.name);
+      return (
+        <div style={{position:"fixed",inset:0,background:"rgba(15,15,26,0.4)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:4000}} onClick={onDismiss}>
+          <div className="card" style={{padding:24,width:380,margin:"0 16px",background:C.white,maxHeight:"80vh",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+              <span style={{fontSize:20}}>⚠️</span>
+              <div style={{fontWeight:800,fontSize:15,color:C.ink}}>Status update needed</div>
+            </div>
+            <p style={{fontSize:13,color:C.inkSoft,marginBottom:12,lineHeight:1.6}}>
+              <strong style={{color:C.ink}}>{orphans.length} application{orphans.length>1?"s":""}</strong> use{orphans.length===1?"s":""} a stage that no longer exists. Reassign {orphans.length===1?"it":"them"} below:
+            </p>
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16,overflowY:"auto",flex:1}}>
+              {orphans.map(j => (
+                <div key={j.id} style={{background:C.bg,borderRadius:8,padding:"10px 12px",border:`1.5px solid ${C.border}`}}>
+                  <div style={{fontWeight:700,fontSize:13,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.title}</div>
+                  <div style={{fontSize:11,color:C.inkSoft,marginTop:1}}>{j.company}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8}}>
+                    <span style={{fontSize:11,color:"#DC2626",fontWeight:600,background:"#FFF0F0",borderRadius:4,padding:"2px 7px",textDecoration:"line-through",whiteSpace:"nowrap"}}>{j.status}</span>
+                    <span style={{fontSize:12,color:C.inkSoft,flexShrink:0}}>→</span>
+                    <select value={selections[j.id]} onChange={e=>setSelections(s=>({...s,[j.id]:e.target.value}))}
+                      style={{flex:1,fontSize:12,fontWeight:600,padding:"4px 8px",borderRadius:7,border:`1.5px solid ${C.border}`,background:C.white,color:C.ink,fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
+                      {validStatuses.map(name => <option key={name} value={name}>{name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn-outline" style={{flex:1,padding:9}} onClick={onDismiss}>Dismiss</button>
+              <button className="btn-cta" style={{flex:1,borderRadius:10,padding:9}} onClick={()=>onConfirm(selections)}>Confirm</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // ── Context Menu ──────────────────────────────────────────────────────────
     function ContextMenu({ job, position, onEdit, onDelete, onViewNote, onViewTimeline, onClose }) {
       const ref = useRef();
@@ -953,8 +1046,34 @@
     // ── Settings Page ─────────────────────────────────────────────────────────
     function AppearanceSection({ themeName, themeMode, changeTheme, statusConfig, saveStatusConfig }) {
       const [openColorFor, setOpenColorFor] = React.useState(null);
+      const [pendingThemeName, setPendingThemeName] = React.useState(themeName);
+      const [pendingThemeMode, setPendingThemeMode] = React.useState(themeMode);
+      const [pendingStatusConfig, setPendingStatusConfig] = React.useState(statusConfig);
+
+      // Sync if parent changes (e.g. pipeline section saves, renaming stages)
+      React.useEffect(() => { setPendingStatusConfig(sc => sc.map(ps => { const s = statusConfig.find(x=>x.name===ps.name); return s?{...ps,dot:s.dot,bg:s.bg,text:s.text}:ps; })); }, [statusConfig]);
+
       const sourceStatus = [...statusConfig].sort((a,b) => a.stage_order - b.stage_order)[0];
-      const nonSource = statusConfig.filter(s => s.name !== sourceStatus?.name);
+      const nonSource = pendingStatusConfig.filter(s => s.name !== sourceStatus?.name);
+
+      const themeChanged = pendingThemeName !== themeName || pendingThemeMode !== themeMode;
+      const colorsChanged = pendingStatusConfig.some(ps => {
+        const orig = statusConfig.find(s => s.name === ps.name);
+        return orig && (orig.dot !== ps.dot || orig.bg !== ps.bg || orig.text !== ps.text);
+      });
+      const isDirty = themeChanged || colorsChanged;
+
+      const handleSave = () => {
+        if (themeChanged) changeTheme(pendingThemeName, pendingThemeMode);
+        if (colorsChanged) {
+          const merged = statusConfig.map(s => {
+            const p = pendingStatusConfig.find(ps => ps.name === s.name);
+            return p ? {...s, dot:p.dot, bg:p.bg, text:p.text} : s;
+          });
+          saveStatusConfig(merged);
+        }
+      };
+
       const PRESETS = [
         { name:"default", label:"Default", colors:["#6B6BD4","#4ECDC4","#F0B8D8","#C8B8F8","#FF8C42"] },
         { name:"ocean",   label:"Ocean",   colors:["#0EA5E9","#06B6D4","#818CF8","#A5B4FC","#F97316"] },
@@ -968,10 +1087,10 @@
             <div style={{fontSize:12,fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Mode</div>
             <div style={{display:"inline-flex",background:C.bg,border:`1.5px solid ${C.border}`,borderRadius:12,padding:3,gap:2}}>
               {[["light","☀ Light"],["dark","◐ Dark"],["system","⊙ System"]].map(([val,lbl]) => (
-                <button key={val} onClick={()=>changeTheme(themeName,val)}
+                <button key={val} onClick={()=>setPendingThemeMode(val)}
                   style={{padding:"7px 18px",borderRadius:9,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,
-                    background:themeMode===val?C.white:"transparent",color:themeMode===val?C.ink:C.inkSoft,
-                    boxShadow:themeMode===val?"0 1px 4px rgba(15,15,26,0.10)":"none",transition:"all 0.15s",fontFamily:"inherit"}}>
+                    background:pendingThemeMode===val?C.white:"transparent",color:pendingThemeMode===val?C.ink:C.inkSoft,
+                    boxShadow:pendingThemeMode===val?"0 1px 4px rgba(15,15,26,0.10)":"none",transition:"all 0.15s",fontFamily:"inherit"}}>
                   {lbl}
                 </button>
               ))}
@@ -982,13 +1101,13 @@
             <div style={{fontSize:12,fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Colour Theme</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,maxWidth:400}}>
               {PRESETS.map(p => (
-                <button key={p.name} onClick={()=>changeTheme(p.name,themeMode)}
-                  style={{background:C.white,border:`2px solid ${themeName===p.name?C.indigo:C.border}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",position:"relative",transition:"border-color 0.15s"}}>
+                <button key={p.name} onClick={()=>setPendingThemeName(p.name)}
+                  style={{background:C.white,border:`2px solid ${pendingThemeName===p.name?C.indigo:C.border}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",position:"relative",transition:"border-color 0.15s"}}>
                   <div style={{display:"flex",gap:5,marginBottom:8}}>
                     {p.colors.map((col,i) => <div key={i} style={{width:16,height:16,borderRadius:"50%",background:col}}/>)}
                   </div>
                   <div style={{fontSize:12,fontWeight:600,color:C.ink}}>{p.label}</div>
-                  {themeName===p.name && (
+                  {pendingThemeName===p.name && (
                     <div style={{position:"absolute",top:8,right:8,width:18,height:18,borderRadius:"50%",background:C.indigo,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"white",fontWeight:800}}>✓</div>
                   )}
                 </button>
@@ -997,7 +1116,7 @@
           </div>
           {/* Tag colours */}
           {nonSource.length > 0 && (
-            <div>
+            <div style={{marginBottom:28}}>
               <div style={{fontSize:12,fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Tag Colours</div>
               <div className="card" style={{padding:"4px 0"}}>
                 {nonSource.map((s,i) => (
@@ -1013,7 +1132,7 @@
                       <div style={{position:"absolute",right:16,top:"100%",background:C.white,border:`1.5px solid ${C.border}`,borderRadius:10,padding:10,display:"flex",gap:6,flexWrap:"wrap",zIndex:100,boxShadow:"0 4px 16px rgba(15,15,26,0.12)",width:176}}>
                         {COLOR_PRESETS.map(p=>(
                           <button key={p.label} onClick={()=>{
-                            saveStatusConfig(statusConfig.map(x=>x.name===s.name?{...x,dot:p.dot,bg:p.bg,text:p.text}:x));
+                            setPendingStatusConfig(pendingStatusConfig.map(x=>x.name===s.name?{...x,dot:p.dot,bg:p.bg,text:p.text}:x));
                             setOpenColorFor(null);
                           }} title={p.label}
                             style={{width:24,height:24,borderRadius:"50%",background:p.dot,border:`2.5px solid ${p.dot===s.dot?C.ink:"transparent"}`,cursor:"pointer",padding:0}}/>
@@ -1025,6 +1144,12 @@
               </div>
             </div>
           )}
+          {/* Save button */}
+          <button onClick={isDirty?handleSave:undefined} disabled={!isDirty}
+            style={{padding:"9px 28px",borderRadius:10,border:"none",cursor:isDirty?"pointer":"default",fontSize:13,fontWeight:700,fontFamily:"inherit",
+              background:isDirty?C.indigo:C.border,color:isDirty?"white":C.inkSoft,transition:"background 0.2s,color 0.2s"}}>
+            {isDirty?"Save":"Saved"}
+          </button>
         </div>
       );
     }
@@ -1038,21 +1163,35 @@
       const [limitError, setLimitError] = React.useState("");
       const [dragIdx, setDragIdx] = React.useState(null);
       const [dragOverIdx, setDragOverIdx] = React.useState(null);
+      const [pendingRenames, setPendingRenames] = React.useState({});
       const localRef = React.useRef(local);
       localRef.current = local;
 
-      React.useEffect(() => { setLocal(statusConfig); }, [statusConfig]);
+      React.useEffect(() => { setLocal(statusConfig); setPendingRenames({}); }, [statusConfig]);
+
+      const isDirty = JSON.stringify(local) !== JSON.stringify(statusConfig);
 
       const sourceStatus = [...local].sort((a,b) => a.stage_order - b.stage_order)[0];
       const nonApplied = local.filter(s => s.name !== sourceStatus?.name);
 
-      const commit = updated => { setLocal(updated); saveStatusConfig(updated); };
+      // commit only updates local state — changes are not saved until Save is clicked
+      const commit = updated => setLocal(updated);
 
       const updateName = (i, name) => {
         const target = nonApplied[i];
         setLocal(local.map(s => s === target ? {...s, name} : s));
       };
-      const blurName = () => commit(localRef.current);
+      const blurName = () => {
+        // Detect any renames by comparing local state vs saved statusConfig (matched by stage_order)
+        const origByOrder = Object.fromEntries(statusConfig.map(s => [s.stage_order, s.name]));
+        const newRenames = {};
+        localRef.current.forEach(s => {
+          const orig = origByOrder[s.stage_order];
+          if (orig !== undefined && orig !== s.name) newRenames[orig] = s.name;
+        });
+        setPendingRenames(r => ({ ...r, ...newRenames }));
+        setLocal(localRef.current);
+      };
 
       const toggleType = i => {
         const target = nonApplied[i];
@@ -1184,6 +1323,13 @@
           <p style={{fontSize:11,color:C.inkSoft,marginTop:10,lineHeight:1.5}}>
             Drag ⠿ to reorder · Click type badge to toggle Progress / Terminal · 🔒 system stages are fixed
           </p>
+          <div style={{marginTop:16}}>
+            <button onClick={isDirty?()=>{saveStatusConfig(local,pendingRenames);setPendingRenames({});}:undefined} disabled={!isDirty}
+              style={{padding:"9px 28px",borderRadius:10,border:"none",cursor:isDirty?"pointer":"default",fontSize:13,fontWeight:700,fontFamily:"inherit",
+                background:isDirty?C.indigo:C.border,color:isDirty?"white":C.inkSoft,transition:"background 0.2s,color 0.2s"}}>
+              {isDirty?"Save":"Saved"}
+            </button>
+          </div>
         </div>
       );
     }
@@ -1494,12 +1640,16 @@
           const sc = localStorage.getItem("statusConfig");
           if (sc) {
             const parsed = JSON.parse(sc);
-            let migrated = parsed.map(s => ({
-              ...s,
-              stage_order: s.stage_order ?? (DEFAULT_STATUS_CONFIG.find(d => d.name === s.name)?.stage_order ?? 1),
-              protected:   s.protected   ?? (DEFAULT_STATUS_CONFIG.find(d => d.name === s.name)?.protected   ?? false),
-              type:        s.type        ?? (DEFAULT_STATUS_CONFIG.find(d => d.name === s.name)?.type        ?? "progress"),
-            }));
+            let migrated = parsed.map(s => {
+              const def = DEFAULT_STATUS_CONFIG.find(d => d.name === s.name);
+              return {
+                ...s,
+                stage_order: s.stage_order ?? (def?.stage_order ?? 1),
+                // Force protected flag from defaults so newly-locked stages (e.g. Interview) get locked retroactively
+                protected:   def?.protected ?? s.protected ?? false,
+                type:        s.type ?? (def?.type ?? "progress"),
+              };
+            });
             if (!migrated.find(s => s.name === "No Answer")) {
               const noAnswer = DEFAULT_STATUS_CONFIG.find(s => s.name === "No Answer");
               if (noAnswer) migrated.splice(1, 0, noAnswer);
@@ -1527,9 +1677,20 @@
         document.documentElement.style.background = C.bg;
       }, [themeVersion]);
 
-      const saveStatusConfig = config => {
+      const saveStatusConfig = (config, renameMap = {}) => {
         const newNames = new Set(config.map(s => s.name));
-        const orphans = jobs.filter(j => !newNames.has(j.status));
+        // Jobs whose status is being renamed are not orphans — exclude them from the alert
+        const orphans = jobs.filter(j => !newNames.has(j.status) && !renameMap[j.status]);
+        if (Object.keys(renameMap).length > 0) {
+          save(jobs.map(j => ({
+            ...j,
+            status: renameMap[j.status] ?? j.status,
+            history: (j.history || []).map(h => ({
+              ...h,
+              ...(h.status ? { status: renameMap[h.status] ?? h.status } : {})
+            }))
+          })));
+        }
         setStatusConfig(config);
         localStorage.setItem("statusConfig", JSON.stringify(config));
         if (orphans.length) setOrphanAlert(orphans);
@@ -1770,30 +1931,22 @@
 
 
           {orphanAlert && (
-            <div style={{position:"fixed",inset:0,background:"rgba(15,15,26,0.4)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:4000}} onClick={()=>setOrphanAlert(null)}>
-              <div className="card" style={{padding:24,width:360,margin:"0 16px",background:"white",maxHeight:"80vh",display:"flex",flexDirection:"column"}} onClick={e=>e.stopPropagation()}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-                  <span style={{fontSize:20}}>⚠️</span>
-                  <div style={{fontWeight:800,fontSize:15,color:C.ink}}>Status update needed</div>
-                </div>
-                <p style={{fontSize:13,color:C.inkSoft,marginBottom:12,lineHeight:1.6}}>
-                  <strong style={{color:C.ink}}>{orphanAlert.length} application{orphanAlert.length>1?"s":""}</strong> still use{orphanAlert.length===1?"s":""} a status that no longer exists. Please update {orphanAlert.length===1?"it":"them"}:
-                </p>
-                <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16,overflowY:"auto",flex:1}}>
-                  {orphanAlert.map(j=>(
-                    <div key={j.id} style={{background:C.bg,borderRadius:8,padding:"9px 12px",border:`1.5px solid ${C.border}`}}>
-                      <div style={{fontWeight:700,fontSize:13,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.title}</div>
-                      <div style={{fontSize:11,color:C.inkSoft,marginTop:1}}>{j.company}</div>
-                      <div style={{fontSize:11,color:"#DC2626",fontWeight:600,marginTop:3}}>Status: "{j.status}"</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:8}}>
-                  <button className="btn-outline" style={{flex:1,padding:9}} onClick={()=>setOrphanAlert(null)}>Dismiss</button>
-                  <button className="btn-cta" style={{flex:1,borderRadius:10,padding:9}} onClick={()=>{setOrphanAlert(null);setView("list");}}>Go to Applications</button>
-                </div>
-              </div>
-            </div>
+            <OrphanAlertModal
+              orphans={orphanAlert}
+              statusConfig={statusConfig}
+              onDismiss={()=>setOrphanAlert(null)}
+              onConfirm={selections=>{
+                save(jobs.map(j=>{
+                  const newStatus = selections[j.id];
+                  if (!newStatus) return j;
+                  const history = j.history||[{status:j.status,timestamp:new Date().toISOString()}];
+                  const last = history.filter(h=>h.status).slice(-1)[0]||history[history.length-1];
+                  if (last.status===newStatus) return {...j,status:newStatus};
+                  return {...j,status:newStatus,history:[...history,{status:newStatus,prevStatus:last.status,timestamp:new Date().toISOString()}]};
+                }));
+                setOrphanAlert(null);
+              }}
+            />
           )}
           {ctxMenu?.job && <ContextMenu job={ctxMenu.job} position={{x:ctxMenu.x,y:ctxMenu.y}} onEdit={startEdit} onDelete={deleteJob} onViewNote={setNoteJob} onViewTimeline={setTimelineJob} onClose={()=>setCtxMenu(null)}/>}
           {noteJob && <NoteOverlay job={noteJob} onClose={()=>setNoteJob(null)}/>}
