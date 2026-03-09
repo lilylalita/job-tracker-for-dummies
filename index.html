@@ -319,7 +319,7 @@
         jobs.forEach(job => {
           const hist = (job.history || []).filter(h => h.status);
           const rawSeq = [];
-          hist.forEach(h => { if (!rawSeq.length || rawSeq[rawSeq.length-1] !== h.status) rawSeq.push(h.status); });
+          hist.forEach(h => { if (!rawSeq.length || rawSeq[rawSeq.length-1] !== h.status || h.status === INTERVIEW) rawSeq.push(h.status); });
           if (job.status && rawSeq[rawSeq.length-1] !== job.status) rawSeq.push(job.status);
           // Expand "Interview" → "Interview 1", "Interview 2", etc.
           let iCount = 0;
@@ -380,28 +380,28 @@
       // For each "Interview N", find the highest stage_order among its direct predecessors
       // in the flows map, then place it just after that.  Process in order so
       // "Interview 2" can reference "Interview 1"'s already-computed position.
-      const virtualOrderMap = {};
-      interviewKeys.forEach(name => {
-        if (name === "Interview 1") { virtualOrderMap[name] = interviewBaseOrder; return; }
-        const preds = Object.keys(flows)
-          .filter(key => key.endsWith(`|||${name}`))
-          .map(key => key.split("|||")[0]);
-        let maxPredOrder = interviewBaseOrder;
-        preds.forEach(pred => {
-          const order = (statusConfig.find(s => s.name === pred)?.stage_order)
-                     ?? virtualOrderMap[pred]
-                     ?? interviewBaseOrder;
-          if (order > maxPredOrder) maxPredOrder = order;
+      // Compute longest-path depth from source over the actual flow graph.
+      // Each node's depth = how many hops from Applied it sits in real job paths.
+      // Terminal nodes are excluded — they go to the fixed rightX column.
+      const nodeDepth = { [sourceStatus.name]: 0 };
+      let _changed = true;
+      while (_changed) {
+        _changed = false;
+        Object.keys(flows).forEach(key => {
+          const [from, to] = key.split('|||');
+          if (statusMap[to]?.type === 'terminal') return;
+          if (nodeDepth[from] === undefined) return;
+          const d = nodeDepth[from] + 1;
+          if ((nodeDepth[to] ?? -1) < d) { nodeDepth[to] = d; _changed = true; }
         });
-        virtualOrderMap[name] = maxPredOrder + 0.1;
-      });
+      }
 
       const virtualInterviewNodes = interviewKeys.map(name => ({
         name,
         dot:         interviewBase?.dot  ?? C.teal,
         bg:          interviewBase?.bg   ?? C.tealLight,
         text:        interviewBase?.text ?? "#145E5A",
-        stage_order: virtualOrderMap[name] ?? interviewBaseOrder,
+        stage_order: nodeDepth[name] ?? interviewBaseOrder,
         type:        "progress",
       }));
 
@@ -412,7 +412,11 @@
       const progressNodes = [
         ...visibleStats.filter(s => (s.type ?? "progress") === "progress" && s.name !== "Interview"),
         ...virtualInterviewNodes,
-      ].sort((a, b) => a.stage_order - b.stage_order || a.name.localeCompare(b.name));
+      ].sort((a, b) => {
+        const da = nodeDepth[a.name] ?? a.stage_order;
+        const db = nodeDepth[b.name] ?? b.stage_order;
+        return da - db || a.name.localeCompare(b.name);
+      });
 
       // terminal nodes except the protected No Answer (handled separately)
       const otherTerminals = visibleStats
@@ -690,6 +694,17 @@
       const [editingIdx, setEditingIdx] = React.useState(null);
       const dirty = JSON.stringify(localHistory) !== JSON.stringify(init);
 
+      // Compute display labels — show "Interview N" when multiple interviews exist
+      const totalInterviews = localHistory.filter(h => h.status === "Interview").length;
+      let _iCount = 0;
+      const displayLabels = localHistory.map(h => {
+        if (h.status === "Interview") {
+          _iCount++;
+          return totalInterviews > 1 ? `Interview ${_iCount}` : "Interview";
+        }
+        return h.status;
+      });
+
       const setStatus = (i, val) => {
         setLocalHistory(h => h.map((e,idx) => idx===i ? {...e, status:val} : e));
         setEditingIdx(null);
@@ -745,7 +760,7 @@
                         </div>
                       ) : (
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontSize:13,fontWeight:600,color:C.ink}}>{h.status}</span>
+                          <span style={{fontSize:13,fontWeight:600,color:C.ink}}>{displayLabels[i]}</span>
                           <button onClick={()=>setEditingIdx(i)} title="Edit status"
                             style={{fontSize:11,background:"transparent",border:"none",cursor:"pointer",color:C.inkSoft,padding:"2px 6px",borderRadius:6,lineHeight:1}}
                             onMouseEnter={e=>e.currentTarget.style.background=C.bg}
@@ -1338,6 +1353,12 @@
                            importMode, setImportMode, importReplaceText, setImportReplaceText,
                            onConfirmImport, resetText, setResetText, onReset }) {
       const previewRows = importPreview?.rows?.slice(0, 5) ?? [];
+      const dupCount = (importMode === "merge" && importPreview?.rows)
+        ? importPreview.rows.filter(r => jobs.some(j =>
+            `${(j.title||"").toLowerCase()}|${(j.company||"").toLowerCase()}|${j.date||""}` ===
+            `${(r.title||"").toLowerCase()}|${(r.company||"").toLowerCase()}|${r.date||""}`
+          )).length
+        : 0;
       return (
         <div style={{display:"flex",flexDirection:"column",gap:24}}>
           {/* Export */}
@@ -1357,12 +1378,12 @@
             <div style={{fontSize:12,fontWeight:700,color:C.inkSoft,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>Import</div>
             <div className="card" style={{padding:18}}>
               <p style={{fontSize:13,color:C.inkMid,margin:"0 0 14px",lineHeight:1.6}}>
-                Import a CSV exported from Job Tracker for Dummies.<br/>
+                Import a CSV or Excel file exported from Job Tracker for Dummies.<br/>
                 <span style={{fontSize:11,color:C.inkSoft}}>Required columns: title, company, status, date, cv, notes, url</span>
               </p>
               <label style={{display:"inline-flex",alignItems:"center",gap:6,padding:"9px 16px",borderRadius:10,border:`1.5px solid ${C.border}`,background:C.white,cursor:"pointer",fontSize:12,fontWeight:600,color:C.inkMid}}>
-                📂 Import CSV
-                <input type="file" accept=".csv" onChange={onCSVFile} style={{display:"none"}}/>
+                📂 Import CSV or Excel
+                <input type="file" accept=".csv,.xlsx,.xls" onChange={onCSVFile} style={{display:"none"}}/>
               </label>
 
               {importPreview?.error && (
@@ -1409,11 +1430,16 @@
                         style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1.5px solid #DC2626",fontSize:12,fontFamily:"inherit",outline:"none",color:"#7F1D1D",background:"white"}}/>
                     </div>
                   )}
+                  {importMode==="merge" && dupCount > 0 && (
+                    <div style={{marginTop:10,background:C.indigoLight,borderRadius:8,padding:"8px 12px",fontSize:12,color:C.indigo,fontWeight:600}}>
+                      {dupCount} duplicate{dupCount!==1?"s":""} found — {dupCount===importPreview.rows.length?"nothing new to import, all entries already exist":"will be skipped automatically"}. {importPreview.rows.length - dupCount} new application{(importPreview.rows.length-dupCount)!==1?"s":""} will be added.
+                    </div>
+                  )}
                   {importMode && (
                     <button onClick={onConfirmImport}
-                      disabled={importMode==="replace" && importReplaceText!=="REPLACE"}
-                      className="btn-cta" style={{marginTop:12,borderRadius:10,padding:"9px 20px",fontSize:13,width:"100%",opacity:(importMode==="replace"&&importReplaceText!=="REPLACE")?0.4:1}}>
-                      {importMode==="merge"?"Merge Applications":"Replace All Applications"}
+                      disabled={(importMode==="replace" && importReplaceText!=="REPLACE") || (importMode==="merge" && dupCount===importPreview?.rows?.length)}
+                      className="btn-cta" style={{marginTop:12,borderRadius:10,padding:"9px 20px",fontSize:13,width:"100%",opacity:((importMode==="replace"&&importReplaceText!=="REPLACE")||(importMode==="merge"&&dupCount===importPreview?.rows?.length))?0.4:1}}>
+                      {importMode==="merge" ? `Merge Applications${dupCount>0 ? ` (${importPreview.rows.length - dupCount} new)` : ""}` : "Replace All Applications"}
                     </button>
                   )}
                 </div>
@@ -1587,6 +1613,7 @@
       const [colWidths,setColWidths] = useState(DEFAULT_COL_WIDTHS);
       const [searchQuery,setSearchQuery] = useState("");
       const [showFilters,setShowFilters] = useState(false);
+      const [showExportMenu,setShowExportMenu] = useState(false);
       const [selectedStatuses,setSelectedStatuses] = useState([]);
       const [sortOrder,setSortOrder] = useState("none");
       const [cardFilter,setCardFilter] = useState("All");
@@ -1707,7 +1734,7 @@
           if (j.id!==id) return j;
           const history = j.history||[{status:j.status,timestamp:new Date().toISOString()}];
           const last = history.filter(h=>h.status).slice(-1)[0] || history[history.length-1];
-          if (last.status===newStatus) return {...j,status:newStatus};
+          if (last.status===newStatus && newStatus !== "Interview") return {...j,status:newStatus};
           return {...j,status:newStatus,history:[...history,{status:newStatus,prevStatus:last.status,timestamp:new Date().toISOString()}]};
         }));
       };
@@ -1741,31 +1768,61 @@
         const file = e.target.files[0]; if (!file) return;
         e.target.value = "";
         const EXPECTED = ["title","company","status","date","cv","notes","url"];
-        const reader = new FileReader();
-        reader.onload = ev => {
-          const lines = ev.target.result.trim().split("\n");
-          const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g,"").trim());
-          if (!EXPECTED.every((h,i) => h === headers[i])) {
-            setImportPreview({ error: "This file doesn't match the expected format. Please use a CSV exported from Job Tracker for Dummies." });
-            return;
-          }
-          const rows = lines.slice(1).map(l => {
-            const vals = []; let cur = "", inQ = false;
-            for (const ch of l) {
-              if (ch === '"') { inQ = !inQ; } else if (ch === ',' && !inQ) { vals.push(cur); cur = ""; } else cur += ch;
+        const isExcel = /\.xlsx?$/i.test(file.name);
+
+        if (isExcel) {
+          const reader = new FileReader();
+          reader.onload = ev => {
+            try {
+              const wb = XLSX.read(ev.target.result, { type: "array" });
+              const ws = wb.Sheets[wb.SheetNames[0]];
+              const data = XLSX.utils.sheet_to_json(ws, { defval: "" });
+              if (!data.length) { setImportPreview({ error: "The file appears to be empty." }); return; }
+              const headers = Object.keys(data[0]);
+              if (!EXPECTED.every(h => headers.includes(h))) {
+                setImportPreview({ error: "This file doesn't match the expected format. Please use an Excel file exported from Job Tracker for Dummies." });
+                return;
+              }
+              const rows = data.map(r => Object.fromEntries(EXPECTED.map(h => [h, String(r[h] ?? "")])));
+              setImportPreview({ rows, count: rows.length });
+              setImportMode(null); setImportReplaceText("");
+            } catch(err) {
+              setImportPreview({ error: "Could not read the Excel file. Please make sure it's a valid .xlsx file." });
             }
-            vals.push(cur);
-            return Object.fromEntries(EXPECTED.map((h,i) => [h, vals[i]?.replace(/^"|"$/g,"") ?? ""]));
-          });
-          setImportPreview({ rows, count: rows.length });
-          setImportMode(null); setImportReplaceText("");
-        };
-        reader.readAsText(file);
+          };
+          reader.readAsArrayBuffer(file);
+        } else {
+          const reader = new FileReader();
+          reader.onload = ev => {
+            const lines = ev.target.result.trim().split("\n");
+            const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g,"").trim());
+            if (!EXPECTED.every((h,i) => h === headers[i])) {
+              setImportPreview({ error: "This file doesn't match the expected format. Please use a CSV exported from Job Tracker for Dummies." });
+              return;
+            }
+            const rows = lines.slice(1).map(l => {
+              const vals = []; let cur = "", inQ = false;
+              for (const ch of l) {
+                if (ch === '"') { inQ = !inQ; } else if (ch === ',' && !inQ) { vals.push(cur); cur = ""; } else cur += ch;
+              }
+              vals.push(cur);
+              return Object.fromEntries(EXPECTED.map((h,i) => [h, vals[i]?.replace(/^"|"$/g,"") ?? ""]));
+            });
+            setImportPreview({ rows, count: rows.length });
+            setImportMode(null); setImportReplaceText("");
+          };
+          reader.readAsText(file);
+        }
       };
 
       const confirmImport = () => {
         if (!importPreview?.rows) return;
-        const newJobs = importPreview.rows.map(r => ({...r, id: Date.now().toString() + Math.random().toString(36).slice(2)}));
+        let toImport = importPreview.rows;
+        if (importMode === "merge") {
+          const existingKeys = new Set(jobs.map(j => `${(j.title||"").toLowerCase()}|${(j.company||"").toLowerCase()}|${j.date||""}`));
+          toImport = toImport.filter(r => !existingKeys.has(`${(r.title||"").toLowerCase()}|${(r.company||"").toLowerCase()}|${r.date||""}`));
+        }
+        const newJobs = toImport.map(r => ({...r, id: Date.now().toString() + Math.random().toString(36).slice(2)}));
         if (importMode === "replace") {
           save(newJobs);
         } else {
@@ -1849,18 +1906,12 @@
       const deleteJob = id => save(jobs.filter(j=>j.id!==id));
 
       const exportToExcel = () => {
-        const rows = jobs.map(j => ({
-          "Position":    j.title,
-          "Company":     j.company,
-          "Status":      j.status,
-          "Date":        j.date || "",
-          "CV Version":  j.cv || "",
-          "Notes":       j.notes || "",
-        }));
+        const FIELDS = ["title","company","status","date","cv","notes","url"];
+        const rows = jobs.map(j => Object.fromEntries(FIELDS.map(f => [f, j[f] ?? ""])));
         const ws = XLSX.utils.json_to_sheet(rows);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Applications");
-        XLSX.writeFile(wb, "job-tracker.xlsx");
+        XLSX.writeFile(wb, `jobtrackerfordummies_export_${new Date().toISOString().slice(0,10)}.xlsx`);
       };
       const startEdit = job => { setForm(job); setEditId(job.id); setAddMode("manual"); setView("add"); };
       const toggleStatus = s => setSelectedStatuses(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);
@@ -2148,7 +2199,23 @@
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     {!isMobile && <button onClick={()=>setColWidths(DEFAULT_COL_WIDTHS)} style={{background:"transparent",border:"none",fontSize:11,color:C.inkSoft,cursor:"pointer"}}>Reset columns</button>}
-                    <button onClick={exportToExcel} className="filter-pill" style={{display:"flex",alignItems:"center",gap:5,fontWeight:600}}>⬇ Export</button>
+                    <div style={{position:"relative"}}>
+                      <button onClick={()=>setShowExportMenu(o=>!o)} className="filter-pill" style={{display:"flex",alignItems:"center",gap:5,fontWeight:600}}>⬇ Export as ▾</button>
+                      {showExportMenu && (
+                        <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:C.white,border:`1.5px solid ${C.border}`,borderRadius:10,boxShadow:"0 4px 16px rgba(0,0,0,0.10)",zIndex:100,minWidth:140,overflow:"hidden"}}>
+                          <button onClick={()=>{exportCSV();setShowExportMenu(false);}}
+                            style={{display:"block",width:"100%",padding:"10px 16px",textAlign:"left",background:"transparent",border:"none",fontSize:13,fontWeight:500,color:C.ink,cursor:"pointer",fontFamily:"inherit"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            .csv
+                          </button>
+                          <button onClick={()=>{exportToExcel();setShowExportMenu(false);}}
+                            style={{display:"block",width:"100%",padding:"10px 16px",textAlign:"left",background:"transparent",border:"none",fontSize:13,fontWeight:500,color:C.ink,cursor:"pointer",fontFamily:"inherit"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            .xlsx
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
